@@ -14,6 +14,7 @@
 #include "mlir/Conversion/AffineToStandard/AffineToStandard.h"
 
 #include "mlir/Analysis/NestedMatcher.h"
+#include "mlir/IR/Matchers.h"
 #include "mlir/Dialect/AffineOps/AffineOps.h"
 #include "mlir/Dialect/LoopOps/LoopOps.h"
 #include "mlir/Dialect/StandardOps/Ops.h"
@@ -127,12 +128,22 @@ public:
     // We proceed in the reverse order to leverage use-def chains.
     // TODO: a better mathcher-like syntax could be beneficial in either C++ or
     // Tablegen, or both.
+    using mlir::matchers::m_Placeholder;
+    using mlir::matchers::m_SpecificVal;
+    auto _i = m_Placeholder(body.getContext(), m_SpecificVal(i));
+    auto _j = m_Placeholder(body.getContext(), m_SpecificVal(j));
+    auto _k = m_Placeholder(body.getContext(), m_SpecificVal(k));
+    auto a = m_Op<AffineLoadOp>(_i, _k);
+    auto b = m_Op<AffineLoadOp>(_k, _j);
+    auto c = m_Op<AffineLoadOp>(_i, _j);
+    // TODO: relax the order of operands and introduce
+    // ArrayPlaceholder.
+    auto bodyGemmOp = m_Op<AddFOp>(c, m_Op<MulFOp>(a, b));
 
     // Check that the last operation before we exit the body (i.e. before the
     // mandatory terminator) is a store.
-    Value *storeD1, *storeD2;
     auto store = dyn_cast<AffineStoreOp>(*std::prev(body.front().end(), 2));
-    if (!anyPermutation(store, {i, j, k}, &storeD1, &storeD2))
+    if (!matchPattern(store, m_Op<AffineStoreOp>(_i, _j))) 
       return matchFailure();
 
     // Check that the value we store was computed as the result of an floating
@@ -142,40 +153,50 @@ public:
     if (!add)
       return matchFailure();
 
+    if (!bodyGemmOp.match(add))
+      return matchFailure();
+    
     // Check that the left operand of the add comes from a load that uses the
     // same array and the same subscripts as the store.
     // TODO: relax the order of operands
     // TODO: introduce the notion of placeholders instead of using explicit
     // value matching here.
-    auto loadC = dyn_cast_or_null<AffineLoadOp>(add.lhs()->getDefiningOp());
-    Value *loadCD1, *loadCD2;
-    if (!loadC || !anyPermutation(loadC, {i, j, k}, &loadCD1, &loadCD2) ||
-        loadC.getMemRef() != store.getMemRef() || loadCD1 != storeD1 ||
-        loadCD2 != storeD2)
-      return matchFailure();
+    //Operation *loadC = dyn_cast<AffineLoadOp>(add.lhs()->getDefiningOp());
+    //if (!matchPattern(loadC, m_Op<AffineLoadOp>(_i, _j))) {
+    //  return matchFailure();
+    //}
+    //Value *loadCD1, *loadCD2;
+    //if (!loadC || !anyPermutation(loadC, {i, j, k}, &loadCD1, &loadCD2) ||
+    //    loadC.getMemRef() != store.getMemRef() || loadCD1 != storeD1 ||
+    //    loadCD2 != storeD2)
+    //  return matchFailure();
 
     // Check that the right operand of the add comes from a floating point
     // multiplication (the first operation in the matmul kernel).
     // TODO: relax the order of operands
-    auto mul = dyn_cast_or_null<MulFOp>(add.rhs()->getDefiningOp());
-    if (!mul)
-      return matchFailure();
+    //auto mul = dyn_cast_or_null<MulFOp>(add.rhs()->getDefiningOp());
+    //if (!mul)
+    //  return matchFailure();
 
     // Check that the left and right operands of a multiplication come from
     // loads.
-    auto loadA = dyn_cast_or_null<AffineLoadOp>(mul.lhs()->getDefiningOp());
-    auto loadB = dyn_cast_or_null<AffineLoadOp>(mul.rhs()->getDefiningOp());
-    if (!loadA || !loadB)
-      return matchFailure();
+    //Operation *loadA = dyn_cast<AffineLoadOp>(mul.lhs()->getDefiningOp());
+    //Operation *loadB = dyn_cast<AffineLoadOp>(mul.rhs()->getDefiningOp());
+    //if (!loadA || !loadB)
+    //  return matchFailure();
 
     // Given loads A(a1,a2), B(b1,b2), C(c1,c2) [defined above], check that the
     // subscripts match as in a1=c1, b2=c2, a2=b1.
     // TODO: support transposed matrix multiplications here.
-    Value *loadAD1, *loadAD2, *loadBD1, *loadBD2;
-    if (!anyPermutation(loadA, {i, j, k}, &loadAD1, &loadAD2) ||
-        !anyPermutation(loadB, {i, j, k}, &loadBD1, &loadBD2) ||
-        loadAD1 != loadCD1 || loadBD2 != loadCD2 || loadAD2 != loadBD1)
-      return matchFailure();
+    //Value *loadAD1, *loadAD2, *loadBD1, *loadBD2;
+    //if (!anyPermutation(loadA, {i, j, k}, &loadAD1, &loadAD2) ||
+    //    !anyPermutation(loadB, {i, j, k}, &loadBD1, &loadBD2) ||
+    //    loadAD1 != loadCD1 || loadBD2 != loadCD2 || loadAD2 != loadBD1)
+    //  return matchFailure();
+    //if ((!matchPattern(loadA, m_Op<AffineLoadOp>(_i, _k))) ||
+    //    (!matchPattern(loadB, m_Op<AffineLoadOp>(_k, _j)))) {
+    //  return matchFailure();
+    //}
 
     // Check that only the operations that we've seen already are in the region.
     // In particular, there must be 3 loads, 1 store, 1 mul, 1 add and 1

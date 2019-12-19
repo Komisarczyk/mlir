@@ -31,13 +31,13 @@ template <typename Matcher> unsigned countMatches(FuncOp f, Matcher &matcher) {
 }
 
 using mlir::matchers::m_Any;
-using mlir::matchers::m_Val;
+using mlir::matchers::m_SpecificVal;
 static void test1(FuncOp f) {
   assert(f.getNumArguments() == 3 && "matcher test funcs must have 3 args");
 
-  auto a = m_Val(f.getArgument(0));
-  auto b = m_Val(f.getArgument(1));
-  auto c = m_Val(f.getArgument(2));
+  auto a = m_SpecificVal(f.getArgument(0));
+  auto b = m_SpecificVal(f.getArgument(1));
+  auto c = m_SpecificVal(f.getArgument(2));
 
   auto p0 = m_Op<AddFOp>(); // using 0-arity matcher
   llvm::outs() << "Pattern add(*) matched " << countMatches(f, p0)
@@ -123,7 +123,7 @@ static void test1(FuncOp f) {
 }
 
 void test2(FuncOp f) {
-  auto a = m_Val(f.getArgument(0));
+  auto a = m_SpecificVal(f.getArgument(0));
   FloatAttr floatAttr;
   auto p = m_Op<MulFOp>(a, m_Op<AddFOp>(a, m_Constant(&floatAttr)));
   // Last operation that is not the terminator.
