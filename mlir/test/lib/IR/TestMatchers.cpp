@@ -169,6 +169,31 @@ void matmul(FuncOp f) {
                << countMatches(f, p1) << " times\n";
 }
 
+void matmulAtrans(FuncOp f) {
+  if (f.getNumArguments() != 3)
+    llvm_unreachable("matcher test func must have 3 args");
+  SmallVector<AffineForOp, 3> loops = getNestedLoops(f);
+  if (loops.size() != 3)
+    llvm_unreachable("matcher test func must have 3 loops");
+  Value *i = loops[0].getInductionVar();
+  Value *j = loops[1].getInductionVar();
+  Value *k = loops[2].getInductionVar();
+  using namespace mlir::matchers;
+  auto _i = m_Placeholder(f.getContext(), m_SpecificVal(i));
+  auto _j = m_Placeholder(f.getContext(), m_SpecificVal(j));
+  auto _k = m_Placeholder(f.getContext(), m_SpecificVal(k));
+  auto aTrans = m_Op<AffineLoadOp>(_k, _i);
+  auto a = m_Op<AffineLoadOp>(_i, _k);
+  auto b = m_Op<AffineLoadOp>(_k, _j);
+  auto c = m_Op<AffineLoadOp>(_i, _j);
+  auto p1 = m_Op<AddFOp>(c, m_Op<MulFOp>(aTrans, b));
+  auto p2 = m_Op<AddFOp>(c, m_Op<MulFOp>(a, b));
+  llvm::outs() << "Pattern add(C(i, j), mul(A(k, i), B(k, j))) matched "
+               << countMatches(f, p1) << " times\n";
+   llvm::outs() << "Pattern add(C(i, j), mul(A(i, k), B(k, j))) matched "
+               << countMatches(f, p2) << " times\n";
+}
+
 void TestMatchers::runOnFunction() {
   auto f = getFunction();
   llvm::outs() << f.getName() << "\n";
@@ -178,6 +203,8 @@ void TestMatchers::runOnFunction() {
     test2(f);
   if (f.getName() == "matmul")
     matmul(f);
+  if (f.getName() == "matmulAtrans")
+    matmulAtrans(f);
 }
 
 static PassRegistration<TestMatchers> pass("test-matchers",

@@ -59,3 +59,25 @@ func @matmul(%A: memref<42x42xf32>, %B: memref<42x42xf32>, %C: memref<42x42xf32>
 
 // CHECK-LABEL: matmul
 //       CHECK: Pattern add(C(i, j), mul(A(i, k), B(k, j))) matched 1 times
+
+func @matmulAtrans(%A: memref<42x42xf32>, %B: memref<42x42xf32>, %C: memref<42x42xf32>) {
+  affine.for %i = 0 to 42 {
+    affine.for %j = 0 to 42 {
+      affine.for %k = 0 to 42 {
+        %0 = affine.load %A[%k, %i] : memref<42x42xf32>
+        %1 = affine.load %B[%k, %j] : memref<42x42xf32>
+        %2 = affine.load %C[%i, %j] : memref<42x42xf32>
+        %3 = mulf %0, %1 : f32
+        %4 = addf %2, %3 : f32
+        affine.store %4, %C[%i, %j] : memref<42x42xf32>
+      }
+    }
+  }
+  return
+}
+
+// CHECK-LABEL: matmulAtrans
+//       CHECK: Pattern add(C(i, j), mul(A(k, i), B(k, j))) matched 1 times
+//       CHECK: Pattern add(C(i, j), mul(A(i, k), B(k, j))) matched 0 times
+
+
