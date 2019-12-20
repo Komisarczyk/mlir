@@ -10,6 +10,7 @@
 #include "mlir/IR/Function.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/Pass/Pass.h"
+#include "mlir/Transforms/LoopUtils.h"
 
 using namespace mlir;
 
@@ -134,6 +135,40 @@ void test2(FuncOp f) {
         << floatAttr.getValueAsDouble() << "\n";
 }
 
+SmallVector<AffineForOp, 3> getNestedLoops(FuncOp f) { 
+  SmallVector<AffineForOp, 4> bands;
+  auto getLoops = [&](AffineForOp root) {
+    getPerfectlyNestedLoops(bands, root);
+  };
+
+  for (auto &block: f)
+    for (auto &op : block)
+      if (auto forOp = dyn_cast<AffineForOp>(op))
+        getLoops(forOp);
+  return std::move(bands);
+}
+
+void matmul(FuncOp f) {
+  if (f.getNumArguments() != 3)
+    llvm_unreachable("matcher test func must have 3 args");
+  SmallVector<AffineForOp, 3> loops = getNestedLoops(f);
+  if (loops.size() != 3)
+    llvm_unreachable("matcher test func must have 3 loops");
+  Value *i = loops[0].getInductionVar();
+  Value *j = loops[1].getInductionVar();
+  Value *k = loops[2].getInductionVar();
+  using namespace mlir::matchers;
+  auto _i = m_Placeholder(f.getContext(), m_SpecificVal(i));
+  auto _j = m_Placeholder(f.getContext(), m_SpecificVal(j));
+  auto _k = m_Placeholder(f.getContext(), m_SpecificVal(k));
+  auto a = m_Op<AffineLoadOp>(_i, _k);
+  auto b = m_Op<AffineLoadOp>(_k, _j);
+  auto c = m_Op<AffineLoadOp>(_i, _j);
+  auto p1 = m_Op<AddFOp>(c, m_Op<MulFOp>(a, b));
+  llvm::outs() << "Pattern add(C(i, j), mul(A(i, k), B(k, j))) matched "
+               << countMatches(f, p1) << " times\n";
+}
+
 void TestMatchers::runOnFunction() {
   auto f = getFunction();
   llvm::outs() << f.getName() << "\n";
@@ -141,6 +176,8 @@ void TestMatchers::runOnFunction() {
     test1(f);
   if (f.getName() == "test2")
     test2(f);
+  if (f.getName() == "matmul")
+    matmul(f);
 }
 
 static PassRegistration<TestMatchers> pass("test-matchers",
