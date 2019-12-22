@@ -21,11 +21,6 @@
 #include "mlir/Dialect/AffineOps/AffineOps.h"
 
 namespace mlir {
-
-namespace matchers {
-  class m_Placeholder;
-}
-
 namespace detail {
 
 /// The matcher that matches a certain kind of Attribute and binds the value
@@ -128,73 +123,6 @@ template <int64_t TargetNotValue> struct constant_int_not_value_matcher {
 /// The matcher that matches a certain kind of op.
 template <typename OpClass> struct op_matcher {
   bool match(Operation *op) { return isa<OpClass>(op); }
-};
-
-template <typename OpClass> struct op_load_store_matcher {
-
-  std::vector<matchers::m_Placeholder> placeholders_;
-
-  op_load_store_matcher(std::vector<matchers::m_Placeholder> ps) : placeholders_(ps) {
-    int pos = 0;
-    for (auto &placeholder : placeholders_) { 
-      // At this point we know the placeholder postion.
-      // We create the affine expression to match.
-      detail::bindDims(
-        placeholder.pattern_.ctx_, 
-        placeholder.pattern_.expr_, pos++);
-      placeholder.pattern_.expr_ = placeholder.pattern_.expr_ + 
-        placeholder.pattern_.constant_;
-      placeholder.pattern_.expr_ = placeholder.pattern_.expr_ *
-        placeholder.pattern_.coefficient_;
-    }
-  };
-  op_load_store_matcher() = delete;
-  bool match(Operation *op) { 
-    if (!placeholders_.size()) {
-      llvm_unreachable("expect non empty placeholders");
-    }
-    if (!op) {
-      return false;
-    }
-    if (!isa<OpClass>(op)) {
-      return false;
-    }
-    if (auto loadOp = dyn_cast<AffineLoadOp>(op)) {
-      size_t dims = loadOp.getAffineMap().getNumResults();
-      if (dims != placeholders_.size()) {
-        return false;
-      }
-      SmallVector<Value *, 4> operands = loadOp.getMapOperands();
-      for (size_t dim = 0; dim < dims; dim++) {
-        AffineExpr loadAffine = loadOp.getAffineMap().getResult(dim);
-        if (placeholders_[dim].pattern_.expr_ != loadAffine) {
-          return false;
-        }
-        if (!placeholders_[dim].candidate_.match(operands[dim])) {
-          return false;
-        }
-      }
-      return true;
-    }
-    if (auto storeOp = dyn_cast<AffineStoreOp>(op)) {
-      size_t dims = storeOp.getAffineMap().getNumResults();
-      if (dims != placeholders_.size()) {
-        return false;
-      }
-      SmallVector<Value *, 4> operands = storeOp.getMapOperands();
-      for (size_t dim = 0; dim < dims; dim++) {
-        AffineExpr storeAffine = storeOp.getAffineMap().getResult(dim);
-        if (placeholders_[dim].pattern_.expr_ != storeAffine) {
-          return false; 
-        }
-        if (!placeholders_[dim].candidate_.match(operands[dim])) {
-          return false;
-        }
-      }
-      return true;
-    }
-    llvm_unreachable("expect AffineStore or AffineLoad");
-  };
 };
 
 /// Trait to check whether T provides a 'match' method with type
@@ -365,6 +293,27 @@ class m_Placeholder {
       pattern_(AffinePattern(ctx)), candidate_(candidate) {};
 };
 
+class StructuredArrayPlaceholder {
+  public:
+    StructuredArrayPlaceholder(detail::PatternMatcherAndBindValue value) : 
+      placeholders_({}), bindValue_(value) {};
+    StructuredArrayPlaceholder operator()(SmallVector<m_Placeholder, 4> indexings) {
+      StructuredArrayPlaceholder placeholder =
+        StructuredArrayPlaceholder(this->bindValue_);
+      placeholder.placeholders_.clear();
+      placeholder.placeholders_ = indexings;
+      return placeholder;
+    }
+    SmallVector<m_Placeholder, 4> placeholders() {
+      return placeholders_;
+    }
+
+  private:
+    SmallVector<m_Placeholder, 4> placeholders_;
+    detail::PatternMatcherAndBindValue bindValue_; 
+};
+using m_ArrayPlaceholder = StructuredArrayPlaceholder; 
+
 inline m_Placeholder
     operator+(m_Placeholder p, int64_t i) {
   p.pattern_.constant_ += i; 
@@ -393,6 +342,104 @@ inline m_Placeholder
   return p;
 }
 
+} // namespace matchers
+
+namespace detail {
+
+template <typename OpClass> struct op_load_store_matcher {
+
+  SmallVector<matchers::m_Placeholder, 4> placeholders_;
+
+  op_load_store_matcher(SmallVector<matchers::m_Placeholder, 4> ps) : placeholders_(ps) {
+    int pos = 0;
+    for (auto &placeholder : placeholders_) { 
+      // At this point we know the placeholder postion.
+      // We create the affine expression to match.
+      detail::bindDims(
+        placeholder.pattern_.ctx_, 
+        placeholder.pattern_.expr_, pos++);
+      placeholder.pattern_.expr_ = placeholder.pattern_.expr_ + 
+        placeholder.pattern_.constant_;
+      placeholder.pattern_.expr_ = placeholder.pattern_.expr_ *
+        placeholder.pattern_.coefficient_;
+    }
+  };
+  op_load_store_matcher() = delete;
+  bool match(Operation *op) { 
+    if (!placeholders_.size()) {
+      llvm_unreachable("expect non empty placeholders");
+    }
+    if (!op) {
+      return false;
+    }
+    if (!isa<OpClass>(op)) {
+      return false;
+    }
+    if (auto loadOp = dyn_cast<AffineLoadOp>(op)) {
+      size_t dims = loadOp.getAffineMap().getNumResults();
+      if (dims != placeholders_.size()) {
+        return false;
+      }
+      SmallVector<Value *, 4> operands = loadOp.getMapOperands();
+      for (size_t dim = 0; dim < dims; dim++) {
+        AffineExpr loadAffine = loadOp.getAffineMap().getResult(dim);
+        if (placeholders_[dim].pattern_.expr_ != loadAffine) {
+          return false;
+        }
+        if (!placeholders_[dim].candidate_.match(operands[dim])) {
+          return false;
+        }
+      }
+      return true;
+    }
+    if (auto storeOp = dyn_cast<AffineStoreOp>(op)) {
+      size_t dims = storeOp.getAffineMap().getNumResults();
+      if (dims != placeholders_.size()) {
+        return false;
+      }
+      SmallVector<Value *, 4> operands = storeOp.getMapOperands();
+      for (size_t dim = 0; dim < dims; dim++) {
+        AffineExpr storeAffine = storeOp.getAffineMap().getResult(dim);
+        if (placeholders_[dim].pattern_.expr_ != storeAffine) {
+          return false; 
+        }
+        if (!placeholders_[dim].candidate_.match(operands[dim])) {
+          return false;
+        }
+      }
+      return true;
+    }
+    llvm_unreachable("expect AffineStore or AffineLoad");
+  };
+};
+
+
+template <typename OpClass> struct op_load_store_array_matcher {
+    matchers::StructuredArrayPlaceholder arrayPlaceholder_;
+
+    op_load_store_array_matcher(matchers::StructuredArrayPlaceholder a) :
+      arrayPlaceholder_(a) {};
+    op_load_store_array_matcher() = delete;
+
+    bool match(Operation *op) { 
+      auto placeholderMatcher = 
+        detail::op_load_store_matcher<OpClass>(arrayPlaceholder_.placeholders());
+      if (!placeholderMatcher.match(op))
+        return false;
+      // TODO bind the array name to bindValue_;
+      return true; 
+    };
+};
+
+} // end namespace detail
+
+namespace matchers {
+
+template <typename OpClass>
+    inline detail::op_load_store_array_matcher<OpClass> m_Op(StructuredArrayPlaceholder arg) {
+  return detail::op_load_store_array_matcher<OpClass>(arg);
+}
+
 template<class T, class...>
 struct are_same : std::true_type
 {};
@@ -408,8 +455,8 @@ template <typename OpClass, typename... Args>
     "all args must be Placeholder");
   return detail::op_load_store_matcher<OpClass>({arg, args...});
 }
-
-} // namespace matchers
+ 
+} // end namespace matchers.
 
 } // end namespace mlir
 

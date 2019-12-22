@@ -167,6 +167,17 @@ void matmul(FuncOp f) {
   auto p1 = m_Op<AddFOp>(c, m_Op<MulFOp>(a, b));
   llvm::outs() << "Pattern add(C(i, j), mul(A(i, k), B(k, j))) matched "
                << countMatches(f, p1) << " times\n";
+  // check ArrayPlaceholders.
+  Value *A_name, *B_name, *C_name;
+  auto _A = m_ArrayPlaceholder(m_Val(A_name));
+  auto _B = m_ArrayPlaceholder(m_Val(B_name));
+  auto _C = m_ArrayPlaceholder(m_Val(C_name));
+  auto A = m_Op<AffineLoadOp>(_A({_i, _k}));
+  auto B = m_Op<AffineLoadOp>(_B({_k, _j}));
+  auto C = m_Op<AffineLoadOp>(_C({_i, _j}));
+  auto p2 = m_Op<AddFOp>(C, m_Op<MulFOp>(A, B));
+  llvm::outs() << "Pattern add(C(i, j), mul(A(i, k), B(k, j))) matched "
+               << countMatches(f, p2) << " times\n"; 
 }
 
 void matmulAtrans(FuncOp f) {

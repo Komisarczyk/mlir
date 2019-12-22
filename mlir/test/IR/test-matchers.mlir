@@ -59,6 +59,7 @@ func @matmul(%A: memref<42x42xf32>, %B: memref<42x42xf32>, %C: memref<42x42xf32>
 
 // CHECK-LABEL: matmul
 //       CHECK: Pattern add(C(i, j), mul(A(i, k), B(k, j))) matched 1 times
+//       CHECK: Pattern add(C(i, j), mul(A(i, k), B(k, j))) matched 1 times
 
 func @matmulAtrans(%A: memref<42x42xf32>, %B: memref<42x42xf32>, %C: memref<42x42xf32>) {
   affine.for %i = 0 to 42 {
