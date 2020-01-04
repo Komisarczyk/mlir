@@ -154,9 +154,9 @@ void matmul(FuncOp f) {
   SmallVector<AffineForOp, 3> loops = getNestedLoops(f);
   if (loops.size() != 3)
     llvm_unreachable("matcher test func must have 3 loops");
-  Value *i = loops[0].getInductionVar();
-  Value *j = loops[1].getInductionVar();
-  Value *k = loops[2].getInductionVar();
+  Value i = loops[0].getInductionVar();
+  Value j = loops[1].getInductionVar();
+  Value k = loops[2].getInductionVar();
   using namespace mlir::matchers;
   auto _i = m_Placeholder(f.getContext(), m_SpecificVal(i));
   auto _j = m_Placeholder(f.getContext(), m_SpecificVal(j));
@@ -168,7 +168,7 @@ void matmul(FuncOp f) {
   llvm::outs() << "Pattern add(C(i, j), mul(A(i, k), B(k, j))) matched "
                << countMatches(f, p1) << " times\n";
   // check ArrayPlaceholders.
-  Value *A_name, *B_name, *C_name;
+  Value A_name, B_name, C_name;
   auto _A = m_ArrayPlaceholder(m_Val(A_name));
   auto _B = m_ArrayPlaceholder(m_Val(B_name));
   auto _C = m_ArrayPlaceholder(m_Val(C_name));
@@ -186,9 +186,9 @@ void matmulAtrans(FuncOp f) {
   SmallVector<AffineForOp, 3> loops = getNestedLoops(f);
   if (loops.size() != 3)
     llvm_unreachable("matcher test func must have 3 loops");
-  Value *i = loops[0].getInductionVar();
-  Value *j = loops[1].getInductionVar();
-  Value *k = loops[2].getInductionVar();
+  Value i = loops[0].getInductionVar();
+  Value j = loops[1].getInductionVar();
+  Value k = loops[2].getInductionVar();
   using namespace mlir::matchers;
   auto _i = m_Placeholder(f.getContext(), m_SpecificVal(i));
   auto _j = m_Placeholder(f.getContext(), m_SpecificVal(j));

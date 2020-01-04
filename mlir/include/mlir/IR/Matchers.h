@@ -164,15 +164,12 @@ struct PatternMatcherValue {
 };
 
 struct PatternMatcherAndBindValue {
-  PatternMatcherAndBindValue(Value *&val) : value(val) {}
-  bool match(Value *v) {
-    if (auto *candidateV = dyn_cast<Value>(v)) {
-      value = candidateV;
-      return true;
-    }
-    return false;
+  PatternMatcherAndBindValue(Value &val) : value(val) {}
+  bool match(Value v) {
+    value = v;
+    return true;
   }
-  Value *&value;
+  Value &value;
 };
 
 template <typename TupleT, class CallbackT, std::size_t... Is>
@@ -266,8 +263,8 @@ auto m_Op(Matchers... matchers) {
 
 namespace matchers {
 inline auto m_Any() { return detail::AnyValueMatcher(); }
-inline auto m_SpecificVal(Value *v) { return detail::PatternMatcherValue(v); }
-inline auto m_Val(Value *&v) { return detail::PatternMatcherAndBindValue(v); }
+inline auto m_SpecificVal(Value v) { return detail::PatternMatcherValue(v); }
+inline auto m_Val(Value &v) { return detail::PatternMatcherAndBindValue(v); }
 
 class AffinePattern {
   public:
@@ -380,7 +377,7 @@ template <typename OpClass> struct op_load_store_matcher {
       if (dims != placeholders_.size()) {
         return false;
       }
-      SmallVector<Value *, 4> operands = loadOp.getMapOperands();
+      SmallVector<Value , 4> operands = loadOp.getMapOperands();
       for (size_t dim = 0; dim < dims; dim++) {
         AffineExpr loadAffine = loadOp.getAffineMap().getResult(dim);
         if (placeholders_[dim].pattern_.expr_ != loadAffine) {
@@ -397,7 +394,7 @@ template <typename OpClass> struct op_load_store_matcher {
       if (dims != placeholders_.size()) {
         return false;
       }
-      SmallVector<Value *, 4> operands = storeOp.getMapOperands();
+      SmallVector<Value , 4> operands = storeOp.getMapOperands();
       for (size_t dim = 0; dim < dims; dim++) {
         AffineExpr storeAffine = storeOp.getAffineMap().getResult(dim);
         if (placeholders_[dim].pattern_.expr_ != storeAffine) {

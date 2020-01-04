@@ -123,8 +123,8 @@ public:
 
   /// Match the region (assumed to be the body of the inntermost loop) to be
   /// a matrix multiplication kernel.
-  PatternMatchResult matchBody(Region &body, Value *i, Value *j,
-                               Value *k) const {
+  PatternMatchResult matchBody(Region &body, Value i, Value j,
+                               Value k) const {
     // We proceed in the reverse order to leverage use-def chains.
     // TODO: a better mathcher-like syntax could be beneficial in either C++ or
     // Tablegen, or both.
@@ -228,9 +228,9 @@ public:
     if (!nested1 || !nested2)
       return matchFailure();
 
-    Value *i = op.getInductionVar();
-    Value *j = nested1.getInductionVar();
-    Value *k = nested2.getInductionVar();
+    Value i = op.getInductionVar();
+    Value j = nested1.getInductionVar();
+    Value k = nested2.getInductionVar();
 
     if (!matchBody(nested2.getLoopBody(), i, j, k))
       return matchFailure();
@@ -248,11 +248,11 @@ public:
   matchAndRewriteNestedPattern(Operation *op, PatternRewriter &rewriter) const {
     auto body = [this](Operation &op) -> bool {
       auto loop = cast<AffineForOp>(op);
-      Value *k = loop.getInductionVar();
+      Value k = loop.getInductionVar();
       auto parent = loop.getParentOfType<AffineForOp>();
-      Value *j = parent.getInductionVar();
+      Value j = parent.getInductionVar();
       parent = parent.getParentOfType<AffineForOp>();
-      Value *i = parent.getInductionVar();
+      Value i = parent.getInductionVar();
       return matchBody(loop.getLoopBody(), i, j, k).hasValue();
     };
 
