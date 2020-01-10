@@ -135,23 +135,29 @@ void test2(FuncOp f) {
         << floatAttr.getValueAsDouble() << "\n";
 }
 
-SmallVector<AffineForOp, 3> getNestedLoops(FuncOp f) { 
-  SmallVector<AffineForOp, 4> bands;
-  auto getLoops = [&](AffineForOp root) {
-    getPerfectlyNestedLoops(bands, root);
+std::vector<SmallVector<AffineForOp, 4>> getNestedLoops(FuncOp f) { 
+  std::vector<SmallVector<AffineForOp, 4>> bands;
+
+  auto getLoopNest = [&](AffineForOp forOp) {
+    SmallVector<AffineForOp, 4> band;
+    getPerfectlyNestedLoops(band, forOp);
+    bands.push_back(band);
   };
 
   for (auto &block: f)
     for (auto &op : block)
       if (auto forOp = dyn_cast<AffineForOp>(op))
-        getLoops(forOp);
-  return std::move(bands);
+        getLoopNest(forOp);
+  return bands;
 }
 
 void matmul(FuncOp f) {
   if (f.getNumArguments() != 3)
     llvm_unreachable("matcher test func must have 3 args");
-  SmallVector<AffineForOp, 3> loops = getNestedLoops(f);
+  auto bands = getNestedLoops(f);
+  if (bands.size() != 1)
+    llvm_unreachable("expect single loop nest");
+  auto loops = bands[0];
   if (loops.size() != 3)
     llvm_unreachable("matcher test func must have 3 loops");
   Value i = loops[0].getInductionVar();
@@ -183,7 +189,10 @@ void matmul(FuncOp f) {
 void matmulAtrans(FuncOp f) {
   if (f.getNumArguments() != 3)
     llvm_unreachable("matcher test func must have 3 args");
-  SmallVector<AffineForOp, 3> loops = getNestedLoops(f);
+  auto bands = getNestedLoops(f);
+  if (bands.size() != 1)
+    llvm_unreachable("expect single loop nest");
+  auto loops = bands[0];
   if (loops.size() != 3)
     llvm_unreachable("matcher test func must have 3 loops");
   Value i = loops[0].getInductionVar();
