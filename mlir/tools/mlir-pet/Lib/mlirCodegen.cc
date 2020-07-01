@@ -9,7 +9,6 @@ using namespace codegen;
 using namespace mlir;
 using namespace llvm;
 using namespace pet;
-
 #define DEBUG_TYPE "pet-to-mlir-codegen"
 
 LoopTable &MLIRCodegen::getLoopTable() { return loopTable_; }
@@ -693,6 +692,113 @@ Value MLIRCodegen::createOp(__isl_take pet_expr *expr, Type t) {
   emitError(location, "invalid binary operator");
   return nullptr;
 }
+static FlatSymbolRefAttr
+getOrInsertFunction(OpBuilder &rewriter, ModuleOp module, std::string fName,
+                    const llvm::ArrayRef<mlir::Type> typeOperands,
+                    const llvm::ArrayRef<mlir::Type> typeResults = {}) {
+  auto *context = module.getContext();
+  if (module.lookupSymbol(fName))
+    return SymbolRefAttr::get(fName, context);
+  auto libFnInfoType =
+      FunctionType::get(typeOperands, typeResults, rewriter.getContext());
+  mlir::OpBuilder::InsertionGuard guard(rewriter);
+  rewriter.setInsertionPoint(module.getBody(),
+                             std::prev(module.getBody()->end()));
+  rewriter.create<FuncOp>(module.getLoc(), fName, libFnInfoType,
+                          llvm::ArrayRef<mlir::NamedAttribute>{});
+  return mlir::SymbolRefAttr::get(fName, context);
+}
+//LogicalResult MLIRCodegen::createBlasOperation(isl::id id) { return failure(); }
+SmallVector<Value, 4> MLIRCodegen::getAccess(__isl_take pet_expr *expr) {
+  // there is next level of args to process
+  bool args = true;
+  pet_expr *header = expr;
+  mlir::Value symbol;
+  SmallVector<mlir::Value, 4> symbols;
+  pet_expr *arg0;
+  pet_expr *arg1;
+  while (args) {
+    args = false;
+    // first op
+    arg0 = pet_expr_get_arg(header, 0);
+    if (pet_expr_get_type(arg0) == pet_expr_op) {
+      args = true;
+      arg1 = pet_expr_get_arg(header, 1);
+      if (failed(getSymbol(arg1, symbol)))
+        llvm_unreachable("require a hit");
+      pet_expr_free(header);
+      header = arg0;
+      symbols.push_back(symbol);
+      pet_expr_free(arg1);
+    }
+    // second op
+    else {
+      arg1 = pet_expr_get_arg(header, 1);
+      if (pet_expr_get_type(arg1) == pet_expr_op) {
+        args = true;
+
+        if (failed(getSymbol(arg0, symbol)))
+          llvm_unreachable("require a hit");
+        pet_expr_free(header);
+        header = arg1;
+        symbols.push_back(symbol);
+        pet_expr_free(arg0);
+      }
+      // both access
+      else {
+
+        if (failed(getSymbol(arg0, symbol)))
+          llvm_unreachable("require a hit");
+        symbols.push_back(symbol);
+        // arg1 = pet_expr_get_arg(header, 1);
+        if (failed(getSymbol(arg1, symbol)))
+          llvm_unreachable("require a hit");
+        symbols.push_back(symbol);
+        pet_expr_free(arg0);
+        pet_expr_free(arg1);
+      }
+    }
+  }
+
+  pet_expr_free(header);
+  return symbols;
+}
+std::string
+composeFunctionNameForMatmul(const llvm::ArrayRef<mlir::Type> &types) {
+  assert((types.size() == 3) && "expect 3 types");
+  auto AShape = types[1].dyn_cast<mlir::MemRefType>().getShape();
+  auto CShape = types[0].dyn_cast<mlir::MemRefType>().getShape();
+  std::string result = "matmul_";
+  result += std::to_string(CShape[0]) + "x" + std::to_string(CShape[1]) + "x" +
+            std::to_string(AShape[1]);
+  return result;
+}
+template <typename... Args>
+std::string composeFunctionCallName(const Args... args) {
+  llvm::ArrayRef<mlir::Type> types = {args...};
+  return composeFunctionNameForMatmul(types);
+
+}
+LogicalResult MLIRCodegen::createBlasOperation(Value A, Value B, Value C, Value alpha) {
+  // auto module = val.getParentOfType<ModuleOp>();
+  auto loc = builder_.getUnknownLoc();
+  auto valueAttr = builder_.getFloatAttr(builder_.getF32Type(), 1);
+  auto beta =
+      builder_.create<ConstantOp>(loc, builder_.getF32Type(), valueAttr);
+  auto module = beta.getParentOfType<ModuleOp>();
+  /*auto fn = composeFunctionCallName(
+      llvm::ArrayRef<mlir::Type>{C.getType(), A.getType(), B.getType()});
+
+  auto symbolFn = getOrInsertFunction(
+      builder_, module, fn,
+      llvm::ArrayRef<mlir::Type>{A.getType(), B.getType(), C.getType(),
+                                 alpha.getType(), beta.getType()});
+  builder_.create<CallOp>(loc, symbolFn, llvm::ArrayRef<Type>{},
+                          llvm::ArrayRef<Value>{A, B, C, alpha, beta});
+  */
+  builder_.create<linalg::MatmulOp>(loc, A, B, C);
+  return success();
+}
 
 // the type of the pet expr may discord with the passed value type.
 // Consider y[0] = 0 where y is a memref<f64>.
@@ -765,22 +871,7 @@ Value MLIRCodegen::createConstantIntOp(int val, Location &loc) {
 
 // insert a symbol reference to "fName", inserting it into the module
 // if necessary.
-static FlatSymbolRefAttr
-getOrInsertFunction(OpBuilder &rewriter, ModuleOp module, std::string fName,
-                    const llvm::ArrayRef<mlir::Type> typeOperands,
-                    const llvm::ArrayRef<mlir::Type> typeResults = {}) {
-  auto *context = module.getContext();
-  if (module.lookupSymbol(fName))
-    return SymbolRefAttr::get(fName, context);
-  auto libFnInfoType =
-      FunctionType::get(typeOperands, typeResults, rewriter.getContext());
-  mlir::OpBuilder::InsertionGuard guard(rewriter);
-  rewriter.setInsertionPoint(module.getBody(),
-                             std::prev(module.getBody()->end()));
-  rewriter.create<FuncOp>(module.getLoc(), fName, libFnInfoType,
-                          llvm::ArrayRef<mlir::NamedAttribute>{});
-  return mlir::SymbolRefAttr::get(fName, context);
-}
+
 
 Value MLIRCodegen::createCallOp(__isl_take pet_expr *expr, Type t) {
   auto nameFunc = std::string(pet_expr_call_get_name(expr));

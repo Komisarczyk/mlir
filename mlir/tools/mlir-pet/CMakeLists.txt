@@ -15,6 +15,9 @@ if (MLIR_PET_BUILD)
     Lib/islAst.cc
     Lib/mlirCodegen.cc
     Lib/islNodeBuilder.cc
+    Lib/access_patterns.cc
+    Lib/builders.cc
+    Lib/matchers.cc
   )
 
   message(STATUS "PET include and lib path ->")
@@ -44,6 +47,8 @@ if (MLIR_PET_BUILD)
     MLIRSupport
     MLIRIR
     MLIRAnalysis
+    MLIRLinalgEDSC
+    MLIRLinalgOps
 
   )
 

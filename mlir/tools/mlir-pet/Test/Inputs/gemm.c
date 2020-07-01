@@ -1,18 +1,26 @@
-float A[1024][1024];
-float B[1024][1024];
-float C[1024][1024];
-float beta = 1.0;
+float A[10][30];
+float B[30][5];
+float C[10][5];
+float D[5][60];
+float E[10][60];
+//float beta = 1.0;
 float alpha = 1.0;
 
 int main(void) {
 
 #pragma scop
-  for (int i = 0; i < 1024; i++) {
-    for (int j = 0; j < 1022; j++)
-      C[i][j] *= beta;
-    for (int k = 0; k < 1024; k++) {
-      for (int j = 0; j < 151; j++)
-        C[i][j] += alpha * A[i][k] * B[k][j];
+  for (int i = 0; i < 10; i++) {
+    for (int j = 0; j < 5; j++){
+      for (int k = 0; k < 30; k++) {
+          C[i][j] += alpha * A[i][k] * B[k][j];
+      }
+    }
+  }
+    for (int i = 0; i < 10; i++) {
+      for (int j = 0; j < 60; j++){
+        for (int k = 0; k < 5; k++) {
+          E[i][j] += alpha * D[i][k] * C[k][j];
+      }
     }
   }
 #pragma endscop

@@ -180,6 +180,83 @@ void IslNodeBuilder::createUser(isl::ast_node userNode) {
   }
 }
 
+void IslNodeBuilder::createBlasOperation(isl::ast_node markNode) {
+    // get to the user
+  if (isl_ast_node_get_type(markNode.get()) != isl_ast_node_mark)
+    llvm_unreachable("code generation error");
+  // isl_ast_node_mark_get_node
+    auto name = isl_id_to_str(markNode.mark_get_id().get());
+  if (!std::string(name).compare(std::string("MatMul"))) {
+         auto node = markNode.mark_get_node();
+    if (isl_ast_node_get_type(node.get()) != isl_ast_node_for)
+      llvm_unreachable("code generation error");
+    node = node.for_get_body();
+    if (isl_ast_node_get_type(node.get()) != isl_ast_node_for)
+      llvm_unreachable("code generation error");
+    node = node.for_get_body();
+    if (isl_ast_node_get_type(node.get()) != isl_ast_node_for)
+      llvm_unreachable("code generation error");
+    node = node.for_get_body();
+    if (isl_ast_node_get_type(node.get()) != isl_ast_node_user)
+      llvm_unreachable("code generation error");
+
+    auto expression = node.user_get_expr();
+    if (isl_ast_expr_get_type(expression.get()) != isl_ast_expr_op)
+      llvm_unreachable("expect isl_ast_expr_op");
+    if (isl_ast_expr_get_op_type(expression.get()) != isl_ast_op_call)
+      llvm_unreachable("expect operation of type call");
+    auto stmtExpression = expression.get_op_arg(0);
+    auto stmtId = stmtExpression.get_id();
+    auto stmt = islAst_.getScop().getStmt(stmtId);
+    if (!stmt)
+      llvm_unreachable("cannot find statement");
+    auto body = stmt->body;
+    if (pet_tree_get_type(body) != pet_tree_expr)
+      llvm_unreachable("expect pet_tree_expr");
+    auto expr = pet_tree_expr_get_expr(body);
+    /////
+        //auto reads = pet_expr_access_get_may_read(expr);
+        //auto writes = pet_expr_access_get_may_write(expr);
+        outs() << "\n...try...\n";
+        //outs() << isl::manage(stmt->domain).get_tuple_name();
+        //isl::manage(reads).dump();
+        //isl::manage(writes).dump();
+      /*reads = reads.apply_domain(band.child(0).get_prefix_schedule_union_map());
+        writes = writes.apply_domain(band.child(0).get_prefix_schedule_union_map());
+        reads.dump();
+        outs() << "\n...\n";
+        writes.dump();
+        outs() << "\n...\n";
+        outs() << "\n...\n";
+        reads.range().dump();
+        reads.range().foreach_set([&](isl::set s) -> isl_stat {
+       outs() <<s.get_tuple_name();
+      return isl_stat_ok;
+    });
+    */
+
+
+    /////
+    // assume 2 args per op expr:
+    if (pet_expr_get_n_arg(expr) != 2)
+      llvm_unreachable("cannot handle the args");
+
+    auto vec = MLIRBuilder_.getAccess(expr);
+    // pet_expr_free(expr);
+    
+
+    if (failed(MLIRBuilder_.createBlasOperation(vec[0], vec[1], vec[3], vec[2]))) {
+      MLIRBuilder_.dump();
+      llvm_unreachable("cannot generate blas function");
+    }
+  }
+ 
+  else{
+
+     llvm_unreachable("Mark type not supported");
+  }
+}
+
 void IslNodeBuilder::createBlock(isl::ast_node blockNode) {
   auto list = blockNode.block_get_children();
   for (int i = 0; i < list.n_ast_node(); i++)
@@ -205,7 +282,7 @@ void IslNodeBuilder::MLIRFromISLAstImpl(isl::ast_node node) {
     createBlock(node);
     return;
   case isl_ast_node_mark:
-    // simply return, don't generate.
+    createBlasOperation(node);
     return;
   case isl_ast_node_if:
     createIf(node);

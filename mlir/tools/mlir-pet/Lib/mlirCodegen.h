@@ -2,6 +2,7 @@
 #define PETMLIR_MLIR_CODEGENERATION_H
 
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
+#include "mlir/Dialect/Linalg/IR/LinalgOps.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/Function.h"
@@ -125,7 +126,12 @@ public:
   // This should not be public, but it is used by IslNodeBuilder.
   mlir::LogicalResult getSymbolInductionVar(std::string idIsl,
                                             mlir::Value &indVar) const;
-
+  // create a blas operation.
+  mlir::LogicalResult createBlasOperation(isl::id id);
+    // provide accessed values for a CallOp; assumes 2 args per pet_op.
+  llvm::SmallVector<mlir::Value, 4> getAccess(__isl_keep pet_expr *expr);
+  mlir::LogicalResult createBlasOperation(mlir::Value A, mlir::Value B, mlir::Value C,
+                    mlir::Value alpha);
 private:
   // current scop. For each scop we create a mlir::FuncOp.
   pet::Scop &scop_;
