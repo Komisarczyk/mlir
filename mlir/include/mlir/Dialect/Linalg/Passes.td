@@ -69,4 +69,8 @@ def LinalgTilingToParallelLoops
   ];
 }
 
+def LinalgMatmulChain : FunctionPass<"linalg-matmul-chain"> {
+  let summary = "Apply matmul chain optimization";
+  let constructor = "mlir::createLinalgMatmulChainPass()";
+}
 #endif // MLIR_DIALECT_LINALG_PASSES

@@ -54,6 +54,8 @@ std::unique_ptr<OperationPass<FuncOp>> createConvertLinalgToAffineLoopsPass();
 void populateLinalgTensorOpsFusionPatterns(MLIRContext *context,
                                            OwningRewritePatternList &patterns);
 
+/// Create a pass to apply matmul-chain optimization.
+std::unique_ptr<OperationPass<FuncOp>> createLinalgMatmulChainPass();
 } // namespace mlir
 
 #endif // MLIR_DIALECT_LINALG_PASSES_H_
