@@ -72,7 +72,7 @@ template <typename AttrT> struct constant_op_binder {
     SmallVector<OpFoldResult, 1> foldedOp;
     LogicalResult result = op->fold(/*operands=*/llvm::None, foldedOp);
     (void)result;
-    assert(succeeded(result) && "expected constant to be foldable");
+    assert(succeeded(result) && "expected ConstantLike op to be foldable");
 
     if (auto attr = foldedOp.front().get<Attribute>().dyn_cast<AttrT>()) {
       if (bind_value)
@@ -155,6 +155,25 @@ typename std::enable_if_t<
                       Operation *>::value,
     bool>
 matchOperandOrValueAtIndex(Operation *op, unsigned idx, MatcherClass &matcher) {
+  // getDefiningOp doesn't work if we want to detect a chain of matmuls.
+  // Specifically, the output value of a `linalg.matmul` is *not* produced by
+  // another `linalg.matmul`, but it is the result of an `alloc` operation or a
+  // block argument. Thus we need to use `getUsers`. For now, we switch on the
+  // operation name and cover the case of the only `linalg.matmul`.
+  if (op->getName().getStringRef() == "linalg.matmul") {
+    // get output value for linalg.matmul.
+    auto users = op->getOperand(2).getUsers();
+    // we assume only two uses for the output value.
+    // 1. the current linalg.matmul
+    // 2. another linalg.matmul.
+    if (std::distance(users.begin(), users.end()) != 2)
+      return false;
+    for (const auto &user : users) {
+      if (user == op)
+        continue;
+      return matcher.match(user);
+    }
+  }
   if (auto defOp = op->getOperand(idx).getDefiningOp())
     return matcher.match(defOp);
   return false;
@@ -163,6 +182,16 @@ matchOperandOrValueAtIndex(Operation *op, unsigned idx, MatcherClass &matcher) {
 /// Terminal matcher, always returns true.
 struct AnyValueMatcher {
   bool match(Value op) const { return true; }
+};
+
+struct AnyValueCaptureMatcher {
+  AnyValueCaptureMatcher() = delete;
+  AnyValueCaptureMatcher(Value &v) : value(v) {}
+  bool match(Value op) {
+    value = op;
+    return true;
+  }
+  Value &value;
 };
 
 /// Binds to a specific value and matches it.
@@ -269,6 +298,9 @@ auto m_Op(Matchers... matchers) {
 namespace matchers {
 inline auto m_Any() { return detail::AnyValueMatcher(); }
 inline auto m_Val(Value v) { return detail::PatternMatcherValue(v); }
+inline auto m_AnyCapture(Value &value) {
+  return detail::AnyValueCaptureMatcher(value);
+}
 } // namespace matchers
 
 } // end namespace mlir

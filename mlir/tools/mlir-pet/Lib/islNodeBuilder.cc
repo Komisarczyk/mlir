@@ -180,13 +180,21 @@ void IslNodeBuilder::createUser(isl::ast_node userNode) {
   }
 }
 
-void IslNodeBuilder::createBlasOperation(isl::ast_node markNode) {
-    // get to the user
+void IslNodeBuilder::createTransposeOperation(std::vector<std::string> list) {
+  auto vec = MLIRBuilder_.getAccess(list);
+
+  if (failed(MLIRBuilder_.createTransposeOperation(vec[0], vec[1]))) {
+    MLIRBuilder_.dump();
+    llvm_unreachable("cannot generate blas function");
+  }
+}
+
+void IslNodeBuilder::createBlasOperation(std::vector<std::string> list) {
+  /*  // get to the user
   if (isl_ast_node_get_type(markNode.get()) != isl_ast_node_mark)
     llvm_unreachable("code generation error");
   // isl_ast_node_mark_get_node
-    auto name = isl_id_to_str(markNode.mark_get_id().get());
-  if (!std::string(name).compare(std::string("MatMul"))) {
+
          auto node = markNode.mark_get_node();
     if (isl_ast_node_get_type(node.get()) != isl_ast_node_for)
       llvm_unreachable("code generation error");
@@ -217,12 +225,12 @@ void IslNodeBuilder::createBlasOperation(isl::ast_node markNode) {
     /////
         //auto reads = pet_expr_access_get_may_read(expr);
         //auto writes = pet_expr_access_get_may_write(expr);
-        outs() << "\n...try...\n";
         //outs() << isl::manage(stmt->domain).get_tuple_name();
         //isl::manage(reads).dump();
         //isl::manage(writes).dump();
-      /*reads = reads.apply_domain(band.child(0).get_prefix_schedule_union_map());
-        writes = writes.apply_domain(band.child(0).get_prefix_schedule_union_map());
+      /*reads =
+  reads.apply_domain(band.child(0).get_prefix_schedule_union_map()); writes =
+  writes.apply_domain(band.child(0).get_prefix_schedule_union_map());
         reads.dump();
         outs() << "\n...\n";
         writes.dump();
@@ -233,27 +241,22 @@ void IslNodeBuilder::createBlasOperation(isl::ast_node markNode) {
        outs() <<s.get_tuple_name();
       return isl_stat_ok;
     });
-    */
+
 
 
     /////
     // assume 2 args per op expr:
     if (pet_expr_get_n_arg(expr) != 2)
       llvm_unreachable("cannot handle the args");
+    */
+  auto vec = MLIRBuilder_.getAccess(list);
+  // pet_expr_free(expr);
 
-    auto vec = MLIRBuilder_.getAccess(expr);
-    // pet_expr_free(expr);
-    
-
-    if (failed(MLIRBuilder_.createBlasOperation(vec[0], vec[1], vec[3], vec[2]))) {
-      MLIRBuilder_.dump();
-      llvm_unreachable("cannot generate blas function");
-    }
-  }
- 
-  else{
-
-     llvm_unreachable("Mark type not supported");
+  // if (failed(MLIRBuilder_.createBlasOperation(vec[0], vec[1], vec[3],
+  // vec[2]))) {
+  if (failed(MLIRBuilder_.createBlasOperation(vec[2], vec[1], vec[0]))) {
+    MLIRBuilder_.dump();
+    llvm_unreachable("cannot generate blas function");
   }
 }
 
@@ -281,9 +284,36 @@ void IslNodeBuilder::MLIRFromISLAstImpl(isl::ast_node node) {
   case isl_ast_node_block:
     createBlock(node);
     return;
-  case isl_ast_node_mark:
-    createBlasOperation(node);
+  case isl_ast_node_mark: {
+    auto name = node.mark_get_id().get_name();
+    outs() << name;
+
+    if (!std::string(name).compare(std::string("MatMul"))) {
+      std::vector<std::string> *vector;
+      vector = (std::vector<std::string> *)(node.mark_get_id().get_user());
+
+      for (std::string s : *vector) {
+        outs() << s;
+      }
+      createBlasOperation(*vector);
+      delete vector;
+
+    } else if (!std::string(name).compare(std::string("Transpose"))) {
+      outs() << "1111\n";
+      std::vector<std::string> *vector;
+      vector = (std::vector<std::string> *)(node.mark_get_id().get_user());
+      for (std::string s : *vector) {
+        outs() << s;
+      }
+      outs() << "1111\n";
+      createTransposeOperation(*vector);
+      delete vector;
+      return;
+    } else {
+      llvm_unreachable("Mark type not supported");
+    }
     return;
+  }
   case isl_ast_node_if:
     createIf(node);
     return;

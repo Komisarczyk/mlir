@@ -102,9 +102,9 @@ static mlir::Value createAlloc(Value A, Value B, PatternRewriter &rewriter,
   return rewriter.create<mlir::AllocOp>(loc, outputMemRef);
 }
 
-static void createMatmul(Value alpha, Value beta, Value A, Value B, Value C,
-                         PatternRewriter &rewriter, Location loc) {
-  rewriter.create<MatmulOp>(loc, beta, alpha, A, B, C);
+static void createMatmul(Value A, Value B, Value C, PatternRewriter &rewriter,
+                         Location loc) {
+  rewriter.create<MatmulOp>(loc, A, B, C);
 }
 
 static long getCurrentNumberOfScalarMults(SmallVector<Value, 8> values) {
@@ -141,13 +141,12 @@ public:
     using mlir::matchers::m_AnyCapture;
     Value A1 = nullptr, A2 = nullptr, A3 = nullptr, A4 = nullptr;
     Value B1 = nullptr, B2 = nullptr;
-    Value alpha1 = nullptr, alpha2 = nullptr, alpha3 = nullptr;
-    Value beta1 = nullptr, beta2 = nullptr, beta3 = nullptr;
+
     // clang-format off
     auto matcher = 
-      m_Op<linalg::MatmulOp>(m_AnyCapture(alpha1), m_AnyCapture(beta1), m_AnyCapture(A1), m_AnyCapture(A2),
-        m_Op<linalg::MatmulOp>(m_AnyCapture(alpha2), m_AnyCapture(beta2), m_AnyCapture(B1), m_AnyCapture(A3),
-          m_Op<linalg::MatmulOp>(m_AnyCapture(alpha3), m_AnyCapture(beta3), 
+      m_Op<linalg::MatmulOp>( m_AnyCapture(A1), m_AnyCapture(A2),
+        m_Op<linalg::MatmulOp>(m_AnyCapture(B1), m_AnyCapture(A3),
+          m_Op<linalg::MatmulOp>(
                                  m_AnyCapture(B2), m_AnyCapture(A4), m_Any())));
     // clang-format on
     if (!matcher.match(op))
@@ -215,9 +214,9 @@ public:
     auto O1 = createAlloc(A3, A4, rewriter, loc);
     auto O2 = createAlloc(A2, O1, rewriter, loc);
     auto O3 = createAlloc(A1, O2, rewriter, loc);
-    createMatmul(alpha1, beta1, A3, A4, O1, rewriter, loc);
-    createMatmul(alpha2, beta2, A2, O1, O2, rewriter, loc);
-    createMatmul(alpha3, beta3, A1, O2, O3, rewriter, loc);
+    createMatmul(A3, A4, O1, rewriter, loc);
+    createMatmul(A2, O1, O2, rewriter, loc);
+    createMatmul(A1, O2, O3, rewriter, loc);
 
     // delete all the matmuls and the operations
     // that create their output buffer.

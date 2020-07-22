@@ -127,11 +127,14 @@ public:
   mlir::LogicalResult getSymbolInductionVar(std::string idIsl,
                                             mlir::Value &indVar) const;
   // create a blas operation.
-  mlir::LogicalResult createBlasOperation(isl::id id);
-    // provide accessed values for a CallOp; assumes 2 args per pet_op.
-  llvm::SmallVector<mlir::Value, 4> getAccess(__isl_keep pet_expr *expr);
-  mlir::LogicalResult createBlasOperation(mlir::Value A, mlir::Value B, mlir::Value C,
-                    mlir::Value alpha);
+  // mlir::LogicalResult createBlasOperation(isl::id id);
+  // provide accessed values for a CallOp; assumes 2 args per pet_op.
+  // llvm::SmallVector<mlir::Value, 4> getAccess(__isl_keep pet_expr *expr);
+  llvm::SmallVector<mlir::Value, 4> getAccess(std::vector<std::string> list);
+  mlir::LogicalResult createBlasOperation(mlir::Value A, mlir::Value B,
+                                          mlir::Value C);
+  mlir::LogicalResult createTransposeOperation(mlir::Value A, mlir::Value B);
+
 private:
   // current scop. For each scop we create a mlir::FuncOp.
   pet::Scop &scop_;

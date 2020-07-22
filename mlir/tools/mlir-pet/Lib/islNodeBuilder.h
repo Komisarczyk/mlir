@@ -43,7 +43,9 @@ private:
   // create an ifOp.
   void createIf(isl::ast_node ifNode);
   // create blas operation.
-  void createBlasOperation(isl::ast_node markNode);
+  void createBlasOperation(std::vector<std::string> list);
+  // create transpose operation.
+  void createTransposeOperation(std::vector<std::string> list);
 };
 
 } // end namespace codegen

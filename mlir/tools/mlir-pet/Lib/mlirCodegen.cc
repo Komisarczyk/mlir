@@ -708,8 +708,9 @@ getOrInsertFunction(OpBuilder &rewriter, ModuleOp module, std::string fName,
                           llvm::ArrayRef<mlir::NamedAttribute>{});
   return mlir::SymbolRefAttr::get(fName, context);
 }
-//LogicalResult MLIRCodegen::createBlasOperation(isl::id id) { return failure(); }
-SmallVector<Value, 4> MLIRCodegen::getAccess(__isl_take pet_expr *expr) {
+// LogicalResult MLIRCodegen::createBlasOperation(isl::id id) { return
+// failure(); }
+/* SmallVector<Value, 4> MLIRCodegen::getAccess(__isl_take pet_expr *expr) {
   // there is next level of args to process
   bool args = true;
   pet_expr *header = expr;
@@ -762,6 +763,21 @@ SmallVector<Value, 4> MLIRCodegen::getAccess(__isl_take pet_expr *expr) {
 
   pet_expr_free(header);
   return symbols;
+} */
+SmallVector<Value, 4> MLIRCodegen::getAccess(std::vector<std::string> list) {
+  // there is next level of args to process
+
+  mlir::Value symbol;
+  SmallVector<mlir::Value, 4> symbols;
+
+  for (auto id : list) {
+    if (failed(symbolTable_.find(id, symbol)))
+      llvm_unreachable("require a hit");
+
+    symbols.push_back(symbol);
+  }
+
+  return symbols;
 }
 std::string
 composeFunctionNameForMatmul(const llvm::ArrayRef<mlir::Type> &types) {
@@ -777,9 +793,8 @@ template <typename... Args>
 std::string composeFunctionCallName(const Args... args) {
   llvm::ArrayRef<mlir::Type> types = {args...};
   return composeFunctionNameForMatmul(types);
-
 }
-LogicalResult MLIRCodegen::createBlasOperation(Value A, Value B, Value C, Value alpha) {
+LogicalResult MLIRCodegen::createBlasOperation(Value A, Value B, Value C) {
   // auto module = val.getParentOfType<ModuleOp>();
   auto loc = builder_.getUnknownLoc();
   auto valueAttr = builder_.getFloatAttr(builder_.getF32Type(), 1);
@@ -799,7 +814,40 @@ LogicalResult MLIRCodegen::createBlasOperation(Value A, Value B, Value C, Value 
   builder_.create<linalg::MatmulOp>(loc, A, B, C);
   return success();
 }
+/*
+LogicalResult MLIRCodegen::createTransposeOperation(Value A, Value B) {
+  auto loc = builder_.getUnknownLoc();
 
+  auto ctx = builder_.getContext();
+  SmallVector<AffineExpr, 8U> outputPermutation;
+  outputPermutation.push_back(getAffineDimExpr(1, ctx));
+  outputPermutation.push_back(getAffineDimExpr(0, ctx));
+
+
+
+  auto permutation =  AffineMap::get(2, 0,
+ArrayRef<AffineExpr>(outputPermutation),ctx);
+  //auto view = builder_.create<linalg::TransposeOp>(loc, A.getType(), B,
+permutation); auto view = builder_.create<linalg::TransposeOp>(loc, A.getType(),
+B, AffineMapAttr::get(permutation)); builder_.create<linalg::CopyOp>(loc, view ,
+A); return success();
+}
+*/
+LogicalResult MLIRCodegen::createTransposeOperation(Value A, Value B) {
+  auto loc = builder_.getUnknownLoc();
+
+  auto ctx = builder_.getContext();
+  SmallVector<AffineExpr, 8U> outputPermutation;
+  outputPermutation.push_back(getAffineDimExpr(1, ctx));
+  outputPermutation.push_back(getAffineDimExpr(0, ctx));
+
+  auto permutation =
+      AffineMap::get(2, 0, ArrayRef<AffineExpr>(outputPermutation), ctx);
+  builder_.create<linalg::CopyOp>(
+      loc, B, A, AffineMapAttr::get(AffineMap::getMultiDimIdentityMap(2, ctx)),
+      AffineMapAttr::get(permutation));
+  return success();
+}
 // the type of the pet expr may discord with the passed value type.
 // Consider y[0] = 0 where y is a memref<f64>.
 // In this case, type will be double but `0` will be
@@ -873,7 +921,10 @@ Value MLIRCodegen::createConstantIntOp(int val, Location &loc) {
 // if necessary.
 
 
+
 Value MLIRCodegen::createCallOp(__isl_take pet_expr *expr, Type t) {
+
+
   auto nameFunc = std::string(pet_expr_call_get_name(expr));
   assert((pet_expr_get_n_arg(expr) == 1) && "must have 1 arg only");
 
