@@ -73,7 +73,17 @@ struct MemRefDataFlowOpt : public MemRefDataFlowOptBase<MemRefDataFlowOpt> {
   DominanceInfo *domInfo = nullptr;
   PostDominanceInfo *postDomInfo = nullptr;
 };
+struct TensorDataFlowOpt : public TensorDataFlowOptBase<TensorDataFlowOpt> {
+  void runOnFunction() override;
 
+  void forwardStoreToLoad(mlir::TensorLoadOp loadOp);
+
+  // Load op's whose results were replaced by those forwarded from stores.
+  SmallVector<Operation *, 8> loadOpsToErase;
+
+  DominanceInfo *domInfo = nullptr;
+  PostDominanceInfo *postDomInfo = nullptr;
+};
 } // end anonymous namespace
 
 /// Creates a pass to perform optimizations relying on memref dataflow such as
@@ -216,4 +226,106 @@ void MemRefDataFlowOpt::runOnFunction() {
       user->erase();
     defOp->erase();
   }
+}
+
+
+/////////////////////////////////////////////////////////////////////MemrefForTensor
+
+
+/// Creates a pass to perform optimizations relying on memref dataflow such as
+/// store to load forwarding, elimination of dead stores, and dead allocs.
+std::unique_ptr<OperationPass<FuncOp>> mlir::createTensorDataFlowOptPass() {
+  return std::make_unique<TensorDataFlowOpt>();
+}
+
+// This is a straightforward implementation not optimized for speed. Optimize
+// if needed.
+void TensorDataFlowOpt::forwardStoreToLoad(mlir::TensorLoadOp loadOp) {
+  // First pass over the use list to get the minimum number of surrounding
+  // loops common between the load op and the store op, with min taken across
+  // all store ops.
+  SmallVector<Operation *, 8> storeOps;
+  
+  for (auto *user : loadOp.getMemRef().getUsers()) {
+    auto storeOp = dyn_cast<mlir::TensorStoreOp>(user);
+    if (!storeOp)
+      continue;
+    storeOps.push_back(storeOp);
+  }
+
+  // The list of store op candidates for forwarding that satisfy conditions
+  // (1) and (2) above - they will be filtered later when checking (3).
+  SmallVector<Operation *, 8> fwdingCandidates;
+
+  // Store ops that have a dependence into the load (even if they aren't
+  // forwarding candidates). Each forwarding candidate will be checked for a
+  // post-dominance on these. 'fwdingCandidates' are a subset of depSrcStores.
+
+  auto destAccess = loadOp.getMemRef();
+  for (auto *storeOp : storeOps) {
+
+    auto srcAccess = dyn_cast<TensorStoreOp>(storeOp).getMemRef();
+    
+    // Find stores that may be reaching the load.
+
+    // Stores that *may* be reaching the load.
+
+
+    // 1. Check if the store and the load have equivalent args
+    if (srcAccess != destAccess)
+      continue;
+
+    // 2. The store has to dominate the load op to be candidate.
+    if (!domInfo->dominates(storeOp, loadOp))
+      continue;
+
+    // We now have a candidate for forwarding.
+    fwdingCandidates.push_back(storeOp);
+  }
+
+  // 3. Of all the store op's that meet the above criteria, the store that
+  // postdominates all 'depSrcStores' (if one exists) is the unique store
+  // providing the value to the load, i.e., provably the last writer to that
+  // memref loc.
+  // Note: this can be implemented in a cleaner way with postdominator tree
+  // traversals. Consider this for the future if needed.
+  Operation *lastWriteStoreOp = nullptr;
+  for (auto *storeOp : fwdingCandidates) {
+    if (llvm::all_of(fwdingCandidates, [&](Operation *depStore) {
+          return postDomInfo->postDominates(storeOp, depStore);
+        })) {
+      lastWriteStoreOp = storeOp;
+      break;
+    }
+  }
+  if (!lastWriteStoreOp)
+    return;
+
+  // Perform the actual store to load forwarding.
+  Value storeVal = cast<TensorStoreOp>(lastWriteStoreOp).getValueToStore();
+  loadOp.replaceAllUsesWith(storeVal);
+  // Record this to erase later.
+  loadOpsToErase.push_back(loadOp);
+}
+
+void TensorDataFlowOpt::runOnFunction() {
+  // Only supports single block functions at the moment.
+  FuncOp f = getFunction();
+  if (f.getBlocks().size() != 1) {
+    markAllAnalysesPreserved();
+    return;
+  }
+
+  domInfo = &getAnalysis<DominanceInfo>();
+  postDomInfo = &getAnalysis<PostDominanceInfo>();
+
+  loadOpsToErase.clear();
+
+  // Walk all load's and perform store to load forwarding.
+  f.walk([&](TensorLoadOp loadOp) { forwardStoreToLoad(loadOp); });
+
+  // Erase all load op's whose results were replaced with store fwd'ed ones.
+  for (auto *loadOp : loadOpsToErase)
+    loadOp->erase();
+
 }

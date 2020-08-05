@@ -13,6 +13,9 @@ if (MLIR_PET_BUILD)
     mlir-pet.cc
     Lib/scop.cc
     Lib/islAst.cc
+    Lib/Toy/Toy.cc
+    Lib/Toy/ToyCombine.cpp
+    Lib/Toy/ShapeInferencePass.cpp
     Lib/mlirCodegen.cc
     Lib/islNodeBuilder.cc
     Lib/access_patterns.cc
@@ -41,17 +44,27 @@ if (MLIR_PET_BUILD)
   target_link_libraries(mlir-pet PRIVATE
     ${PET_LIBRARY}
     ${ISL_LIBRARY}
+    ${dialect_libs}
     LLVMCore
     LLVMSupport
-
+    MLIRCallInterfaces
     MLIRSupport
     MLIRIR
     MLIRAnalysis
     MLIRLinalgEDSC
     MLIRLinalgOps
+    MLIRParser
+    MLIRPass
 
+    MLIRSideEffects
+
+    MLIRTransforms
   )
 
   add_subdirectory(Test)
 
 endif()
+
+
+
+

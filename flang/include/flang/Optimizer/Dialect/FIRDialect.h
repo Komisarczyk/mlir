@@ -64,6 +64,7 @@ inline void registerGeneralPasses() {
   mlir::createLoopCoalescingPass();
   mlir::createAffineDataCopyGenerationPass(0, 0);
   mlir::createMemRefDataFlowOptPass();
+  mlir::createTensorDataFlowOptPass();
   mlir::createStripDebugInfoPass();
   mlir::createPrintOpStatsPass();
   mlir::createInlinerPass();

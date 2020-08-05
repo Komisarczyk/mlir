@@ -286,26 +286,22 @@ void IslNodeBuilder::MLIRFromISLAstImpl(isl::ast_node node) {
     return;
   case isl_ast_node_mark: {
     auto name = node.mark_get_id().get_name();
-    outs() << name;
 
+    outs() << name;
     if (!std::string(name).compare(std::string("MatMul"))) {
       std::vector<std::string> *vector;
       vector = (std::vector<std::string> *)(node.mark_get_id().get_user());
 
-      for (std::string s : *vector) {
-        outs() << s;
-      }
       createBlasOperation(*vector);
       delete vector;
 
     } else if (!std::string(name).compare(std::string("Transpose"))) {
-      outs() << "1111\n";
+
       std::vector<std::string> *vector;
       vector = (std::vector<std::string> *)(node.mark_get_id().get_user());
-      for (std::string s : *vector) {
-        outs() << s;
-      }
-      outs() << "1111\n";
+       for(auto s : *vector){
+         outs() << "\n" << s << "\n";
+       }
       createTransposeOperation(*vector);
       delete vector;
       return;
@@ -326,6 +322,8 @@ void IslNodeBuilder::MLIRFromISLAst() {
   MLIRFromISLAstImpl(root);
   // insert return statement.
   MLIRBuilder_.createReturn();
+  MLIRBuilder_.runPasses();
+
   // verify the module after we have finisched constructing it.
   if (failed(MLIRBuilder_.verifyModule()))
     llvm_unreachable("module verification error");

@@ -14,6 +14,8 @@
 #include "llvm/Support/WithColor.h"
 #include <fstream>
 #include <iostream>
+#include "Lib/Toy/Toy.h"
+
 
 #define DEBUG_TYPE "pet-to-mlir"
 using namespace llvm;
@@ -389,6 +391,7 @@ int main(int argc, char **argv) {
     dumpScheduleWithIsl(petScop.getSchedule(), outs());
   registerDialect<linalg::LinalgDialect>();
   registerDialect<AffineDialect>();
+  registerDialect<toy::ToyDialect>();
   registerDialect<StandardOpsDialect>();
   MLIRContext context;
   if (showDialects) {
@@ -399,13 +402,15 @@ int main(int argc, char **argv) {
     return 0;
   }
   MLIRCodegen MLIRbuilder(context, petScop);
-
+  
   auto ISLAst = IslAst(petScop);
   // ISLAst.dump();
 
   auto ISLNodeBuilder = IslNodeBuilder(ISLAst, MLIRbuilder);
   ISLNodeBuilder.MLIRFromISLAst();
   // MLIRbuilder.dump();
+      
+
 
   if (outputFileName.empty()) {
     MLIRbuilder.print(outs());

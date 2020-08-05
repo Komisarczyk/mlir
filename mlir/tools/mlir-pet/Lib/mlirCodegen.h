@@ -114,6 +114,8 @@ public:
 
   // create a std::return op. TODO: mlir::ReturnOp instead of void?
   void createReturn();
+  // for testing purposes TODO: create separate pipeline for DS transformations
+  void runPasses();
 
   // create a statement from a pet_expr.
   mlir::LogicalResult createStmt(__isl_keep pet_expr *expr);

@@ -68,6 +68,11 @@ std::unique_ptr<Pass> createParallelLoopCollapsingPass();
 /// store to load forwarding, elimination of dead stores, and dead allocs.
 std::unique_ptr<OperationPass<FuncOp>> createMemRefDataFlowOptPass();
 
+/// Creates a pass to perform optimizations relying on tensor dataflow such as
+/// store to load forwarding
+std::unique_ptr<OperationPass<FuncOp>> createTensorDataFlowOptPass();
+
+
 /// Creates a pass to strip debug information from a function.
 std::unique_ptr<Pass> createStripDebugInfoPass();
 

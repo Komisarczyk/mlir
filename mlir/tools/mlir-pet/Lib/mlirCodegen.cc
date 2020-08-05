@@ -1,10 +1,15 @@
 #include "mlirCodegen.h"
+#include "Toy/Toy.h"
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/Verifier.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 #include <iostream>
 
+#include "Lib/Toy/Passes.h"
+#include "mlir/Pass/Pass.h"
+#include "mlir/Pass/PassManager.h"
+#include "mlir/Transforms/Passes.h"
 using namespace codegen;
 using namespace mlir;
 using namespace llvm;
@@ -522,12 +527,12 @@ Value MLIRCodegen::createPostInc(__isl_take pet_expr *expr) {
   auto rhsType = rhs.getType();
   if (rhsType.isF32())
     constant = createConstantFloatOp(1, loc);
-  if (rhsType.isF64())
+  if (rhsType.isF32())
     constant = createConstantDoubleOp(1, loc);
   if (rhsType.isInteger(32))
     constant = createConstantIntOp(1, loc);
 
-  assert(constant && "unsupported type: expect F32, F64 or int (32 bit)");
+  assert(constant && "unsupported type: expect F32, F32 or int (32 bit)");
 
   Value operation = nullptr;
   switch (pet_expr_op_get_type(expr)) {
@@ -584,7 +589,7 @@ Value MLIRCodegen::createDefinition(__isl_take pet_expr *expr) {
     break;
   }
   case ElementType::DOUBLE: {
-    allocation = createAllocOp(arg, builder_.getF64Type());
+    allocation = createAllocOp(arg, builder_.getF32Type());
     break;
   }
   case ElementType::INT: {
@@ -797,10 +802,9 @@ std::string composeFunctionCallName(const Args... args) {
 LogicalResult MLIRCodegen::createBlasOperation(Value A, Value B, Value C) {
   // auto module = val.getParentOfType<ModuleOp>();
   auto loc = builder_.getUnknownLoc();
-  auto valueAttr = builder_.getFloatAttr(builder_.getF32Type(), 1);
-  auto beta =
-      builder_.create<ConstantOp>(loc, builder_.getF32Type(), valueAttr);
-  auto module = beta.getParentOfType<ModuleOp>();
+  // auto valueAttr = builder_.getFloatAttr(builder_.getF32Type(), 1);
+  // auto beta = builder_.create<ConstantOp>(loc, builder_.getF32Type(),
+  // valueAttr); auto module = beta.getParentOfType<ModuleOp>();
   /*auto fn = composeFunctionCallName(
       llvm::ArrayRef<mlir::Type>{C.getType(), A.getType(), B.getType()});
 
@@ -840,16 +844,26 @@ LogicalResult MLIRCodegen::createTransposeOperation(Value A, Value B) {
   SmallVector<AffineExpr, 8U> outputPermutation;
   outputPermutation.push_back(getAffineDimExpr(1, ctx));
   outputPermutation.push_back(getAffineDimExpr(0, ctx));
+  auto tensor = builder_.create<TensorLoadOp>(loc, A);
+  auto transposed = builder_.create<toy::TransposeOp>(loc, tensor);
 
-  auto permutation =
-      AffineMap::get(2, 0, ArrayRef<AffineExpr>(outputPermutation), ctx);
-  builder_.create<linalg::CopyOp>(
-      loc, B, A, AffineMapAttr::get(AffineMap::getMultiDimIdentityMap(2, ctx)),
-      AffineMapAttr::get(permutation));
+  SmallVector<int64_t, 4U> shape;
+  for (auto i : tensor.getType().getShape()) {
+    shape.insert(shape.begin(), i);
+  }
+
+  auto cast = builder_.create<toy::CastOp>(
+      loc, RankedTensorType::get(shape, builder_.getF32Type()), transposed);
+  /* auto permutation =
+       AffineMap::get(2, 0, ArrayRef<AffineExpr>(outputPermutation), ctx);
+   builder_.create<linalg::CopyOp>(
+       loc, B, A, AffineMapAttr::get(AffineMap::getMultiDimIdentityMap(2, ctx)),
+       AffineMapAttr::get(permutation));*/
+  builder_.create<TensorStoreOp>(loc, cast, B);
   return success();
 }
 // the type of the pet expr may discord with the passed value type.
-// Consider y[0] = 0 where y is a memref<f64>.
+// Consider y[0] = 0 where y is a memref<F32>.
 // In this case, type will be double but `0` will be
 // a pet_expr_int.
 // Thus we first switch on the type of pet_expr `expr` then we adjust
@@ -907,8 +921,8 @@ Value MLIRCodegen::createConstantFloatOp(float val, Location &loc) {
 }
 
 Value MLIRCodegen::createConstantDoubleOp(double val, Location &loc) {
-  auto valueAttr = builder_.getFloatAttr(builder_.getF64Type(), val);
-  return builder_.create<ConstantOp>(loc, builder_.getF64Type(), valueAttr);
+  auto valueAttr = builder_.getFloatAttr(builder_.getF32Type(), val);
+  return builder_.create<ConstantOp>(loc, builder_.getF32Type(), valueAttr);
 }
 
 Value MLIRCodegen::createConstantIntOp(int val, Location &loc) {
@@ -926,6 +940,7 @@ Value MLIRCodegen::createCallOp(__isl_take pet_expr *expr, Type t) {
 
 
   auto nameFunc = std::string(pet_expr_call_get_name(expr));
+  assert((nameFunc == "print_memref_F32") && "only print name");
   assert((pet_expr_get_n_arg(expr) == 1) && "must have 1 arg only");
 
   auto subExpr = pet_expr_get_arg(expr, 0);
@@ -943,6 +958,15 @@ Value MLIRCodegen::createCallOp(__isl_take pet_expr *expr, Type t) {
     return nullptr;
   }
 
+  // enforce memref to be a F32.
+  auto elemType = memRef.getElementType();
+  if (!elemType.isF32()) {
+    LLVM_DEBUG(
+        dbgs()
+        << "createCallOp supports only memref with elements of type F32");
+    return nullptr;
+  }
+
   // cast the memref to unranked type.
   auto loc = builder_.getUnknownLoc();
   auto newMemRefType =
@@ -951,6 +975,11 @@ Value MLIRCodegen::createCallOp(__isl_take pet_expr *expr, Type t) {
 
   // insert the function.
   auto module = castedMemRef.getParentOfType<ModuleOp>();
+  auto symbolFn =
+      getOrInsertFunction(builder_, module, "print_memref_F32",
+                          llvm::ArrayRef<Type>{castedMemRef.getType()});
+  builder_.create<CallOp>(loc, symbolFn, /*return type*/ llvm::ArrayRef<Type>{},
+                          llvm::ArrayRef<Value>{castedMemRef});
 
   pet_expr_free(subExpr);
   pet_expr_free(expr);
@@ -990,11 +1019,11 @@ static ElementType getElementTypeFromMLIRType(Type t) {
   auto memRefElemType = memRef.getElementType();
   if (memRefElemType.isF32())
     return ElementType::FLOAT;
-  if (memRefElemType.isF64())
+  if (memRefElemType.isF32())
     return ElementType::DOUBLE;
   if (memRefElemType.isInteger(32))
     return ElementType::INT;
-  llvm_unreachable("expect type F32/F64/Int32");
+  llvm_unreachable("expect type F32/F32/Int32");
   return ElementType::FLOAT;
 }
 
@@ -1037,7 +1066,7 @@ static mlir::Type getType(const PetArray &array, MLIRContext &context) {
   case ElementType::FLOAT:
     return FloatType::get(StandardTypes::F32, &context);
   case ElementType::DOUBLE:
-    return FloatType::get(StandardTypes::F64, &context);
+    return FloatType::get(StandardTypes::F32, &context);
   case ElementType::INT:
     return IntegerType::get(32, &context);
   }
@@ -1197,6 +1226,25 @@ AffineForOp MLIRCodegen::createLoop(AffineExpr lbExpr, std::string lbId,
 
 void MLIRCodegen::createReturn() {
   builder_.create<ReturnOp>(builder_.getUnknownLoc());
+}
+void MLIRCodegen::runPasses() {
+  mlir::PassManager pm(builder_.getContext());
+  // Apply any generic pass manager command line options and run the pipeline.
+  applyPassManagerCLOptions(pm);
+
+  // Inline all functions into main and then delete them.
+  pm.addPass(mlir::createInlinerPass());
+
+  // Now that there is only one function, we can infer the shapes of each of
+  // the operations.
+  mlir::OpPassManager &optPM = pm.nest<mlir::FuncOp>();
+  //optPM.addPass(mlir::createTensorDataFlowOptPass());
+  //optPM.addPass(mlir::toy::createShapeInferencePass());
+  //optPM.addPass(mlir::createCanonicalizerPass());
+ // optPM.addPass(mlir::createCSEPass());
+
+  if (mlir::failed(pm.run(theModule_)))
+    outs() << "failed to run passes";
 }
 
 void MLIRCodegen::setInsertionPointAfter(AffineForOp *affineForOp) {

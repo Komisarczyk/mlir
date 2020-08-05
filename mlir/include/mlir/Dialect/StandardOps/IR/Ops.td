@@ -2636,6 +2636,10 @@ def TensorLoadOp : Std_Op<"tensor_load",
   let extraClassDeclaration = [{
     /// The result of a tensor_load is always a tensor.
     TensorType getType() { return getResult().getType().cast<TensorType>(); }
+  
+    /// Get memref operand.
+    Value getMemRef() { return getOperand(); }
+
   }];
 
   let assemblyFormat = "$memref attr-dict `:` type($memref)";
@@ -2672,6 +2676,16 @@ def TensorStoreOp : Std_Op<"tensor_store",
   let verifier = ?;
 
   let assemblyFormat = "$tensor `,` $memref attr-dict `:` type($memref)";
+  let extraClassDeclaration = [{
+    /// Get value to be stored by store operation.
+    Value getValueToStore() { return getOperand(0); }
+
+    /// Returns the operand index of the memref.
+    unsigned getMemRefOperandIndex() { return 1; }
+
+    /// Get memref operand.
+    Value getMemRef() { return getOperand(getMemRefOperandIndex()); }
+  }];
 }
 
 //===----------------------------------------------------------------------===//
