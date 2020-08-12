@@ -21,6 +21,7 @@ if (MLIR_PET_BUILD)
     Lib/access_patterns.cc
     Lib/builders.cc
     Lib/matchers.cc
+    Lib/detection.cc
   )
 
   message(STATUS "PET include and lib path ->")
