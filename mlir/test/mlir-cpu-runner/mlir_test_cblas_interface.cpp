@@ -17,7 +17,7 @@
 #include <iostream>
 #include <string.h>
 #include <vector>
-
+#define HAS_CPU_SUPPORT
 #ifdef HAS_CPU_SUPPORT
 #include "dnnl.hpp"
 using namespace dnnl;
@@ -154,41 +154,23 @@ extern "C" void _mlir_ciface_linalg_matmul_viewsxsxf32_viewsxsxf32_viewsxsxf32(
       B->strides[0], 1.0f, C->data + C->offset, C->strides[0]);
 }
 
-void matmulBlas(int transA, int transB, StridedMemRefType<float, 2> *C,
-                StridedMemRefType<float, 2> *A, StridedMemRefType<float, 2> *B,
+void matmulBlas(int transA, int transB, StridedMemRefType<float, 2> &C,
+                StridedMemRefType<float, 2> &A, StridedMemRefType<float, 2> &B,
                 int alpha, int beta) {
-  if (A->strides[1] != B->strides[1] || A->strides[1] != C->strides[1] ||
-      A->strides[1] != 1 || A->sizes[0] < A->strides[1] ||
-      B->sizes[0] < B->strides[1] || C->sizes[0] < C->strides[1] ||
-      C->sizes[0] != A->sizes[0] || C->sizes[1] != B->sizes[1] ||
-      A->sizes[1] != B->sizes[0]) {
-    printMemRefMetaData(std::cerr, *A);
-    printMemRefMetaData(std::cerr, *B);
-    printMemRefMetaData(std::cerr, *C);
-    return;
-  }
-  // std::cout << "\nA -> \n";
-  // printMemRefMetaData(std::cerr, *A);
-  // std::cout << "\nB -> \n";
-  // printMemRefMetaData(std::cerr, *B);
-  // std::cout << "\nC -> \n";
-  // printMemRefMetaData(std::cerr, *C);
-  // std::cout << "\n";
-  size_t M = C->sizes[0];
-  size_t N = C->sizes[1];
-  size_t K = A->sizes[1];
+  size_t M = C.sizes[0];
+  size_t N = C.sizes[1];
+  size_t K = A.sizes[1];
   size_t lda = K;
   size_t ldb = N;
   size_t ldc = N;
-
   char isTransA = (transA) ? 'T' : 'N';
   char isTransB = (transB) ? 'T' : 'N';
 #ifdef HAS_CPU_SUPPORT
-  auto res = dnnl_sgemm(isTransA, isTransB, M, N, K, (float)alpha,
-                        A->data + A->offset, lda, B->data + B->offset, ldb,
-                        (float)beta, C->data + C->offset, ldc);
-  if (res != dnnl_success)
-    assert(0 && "dnnl_sgemm failed");
+  auto res =
+      sgemm(isTransA, isTransB, M, N, K, (float)alpha, A.data + A.offset, lda,
+            B.data + B.offset, ldb, (float)beta, C.data + C.offset, ldc);
+  if (res != status::success)
+    assert(0 && "sgemm failed");
 
   return;
 #endif
@@ -196,76 +178,49 @@ void matmulBlas(int transA, int transB, StridedMemRefType<float, 2> *C,
   assert(0 && "naive gemm not implemented yet");
 }
 
-extern "C" void _mlir_ciface_matmul_42x42x42(int transA, int transB,
-                                             StridedMemRefType<float, 2> *C,
-                                             StridedMemRefType<float, 2> *A,
-                                             StridedMemRefType<float, 2> *B,
-                                             int64_t alpha, int64_t beta,
-                                             int64_t dimForM, int64_t dimForN,
-                                             int64_t dimForK) {
-  // no need for dimForM, N and K as the memref is 2d.
-  matmulBlas(transA, transB, C, A, B, alpha, beta);
-}
-
 extern "C" void _mlir_ciface_matmul_800x900x1100(
-    int transA, int transB, StridedMemRefType<float, 2> *C,
-    StridedMemRefType<float, 2> *A, StridedMemRefType<float, 2> *B,
-    int64_t alpha, int64_t beta, int64_t dimForM, int64_t dimForN,
-    int64_t dimForK) {
+    int transA, int transB, float *C_allocatedptr, float *C_alignedptr,
+    int64_t C_offset, int64_t C_sizes0, int64_t C_sizes1, int64_t C_strides0,
+    int64_t C_strides1, float *A_allocatedptr, float *A_alignedptr,
+    int64_t A_offset, int64_t A_sizes0, int64_t A_sizes1, int64_t A_strides0,
+    int64_t A_strides1, float *B_allocatedptr, float *B_alignedptr,
+    int64_t B_offset, int64_t B_sizes0, int64_t B_sizes1, int64_t B_strides0,
+    int64_t B_strides1, int alpha, int beta) {
+
+  StridedMemRefType<float, 2> C;
+  C.basePtr = C_allocatedptr;
+  C.data = C_alignedptr;
+  C.offset = C_offset;
+  C.sizes[0] = C_sizes0;
+  C.sizes[1] = C_sizes1;
+  C.strides[0] = C_strides0;
+  C.strides[1] = C_strides1;
+  StridedMemRefType<float, 2> A;
+  A.basePtr = A_allocatedptr;
+  A.data = A_alignedptr;
+  A.offset = A_offset;
+  A.sizes[0] = A_sizes0;
+  A.sizes[1] = A_sizes1;
+  A.strides[0] = A_strides0;
+  A.strides[1] = A_strides1;
+  StridedMemRefType<float, 2> B;
+  B.basePtr = B_allocatedptr;
+  B.data = B_alignedptr;
+  B.offset = B_offset;
+  B.sizes[0] = B_sizes0;
+  B.sizes[1] = B_sizes1;
+  B.strides[0] = B_strides0;
+  B.strides[1] = B_strides1;
   // no need for dimForM, N and K as the memref is 2d.
-  matmulBlas(transA, transB, C, A, B, alpha, beta);
-}
-
-extern "C" void _mlir_ciface_matmul_900x1100x1200(
-    int transA, int transB, StridedMemRefType<float, 2> *C,
-    StridedMemRefType<float, 2> *A, StridedMemRefType<float, 2> *B,
-    int64_t alpha, int64_t beta, int64_t dimForM, int64_t dimForN,
-    int64_t dimForK) {
-  // no need for dimForM, N and K as the memref is 2d.
-  matmulBlas(transA, transB, C, A, B, alpha, beta);
-}
-
-extern "C" void _mlir_ciface_matmul_800x900x1000(
-    int transA, int transB, StridedMemRefType<float, 2> *C,
-    StridedMemRefType<float, 2> *A, StridedMemRefType<float, 2> *B,
-    int64_t alpha, int64_t beta, int64_t dimForM, int64_t dimForN,
-    int64_t dimForK) {
-  // no need for dimForM, N and K as the memref is 2d.
-  matmulBlas(transA, transB, C, A, B, alpha, beta);
-}
-
-extern "C" void _mlir_ciface_matmul_800x1100x900(
-    int transA, int transB, StridedMemRefType<float, 2> *C,
-    StridedMemRefType<float, 2> *A, StridedMemRefType<float, 2> *B,
-    int64_t alpha, int64_t beta, int64_t dimForM, int64_t dimForN,
-    int64_t dimForK) {
-  // no need for dimForM, N and K as the memref is 2d.
-  matmulBlas(transA, transB, C, A, B, alpha, beta);
-}
-
-extern "C" void _mlir_ciface_matmul_800x1200x900(
-    int transA, int transB, StridedMemRefType<float, 2> *C,
-    StridedMemRefType<float, 2> *A, StridedMemRefType<float, 2> *B,
-    int64_t alpha, int64_t beta, int64_t dimForM, int64_t dimForN,
-    int64_t dimForK) {
-  // no need for dimForM, N and K as the memref is 2d.
-  matmulBlas(transA, transB, C, A, B, alpha, beta);
-}
-
-extern "C" void _mlir_ciface_matvec_2000x2000x2000(
-    StridedMemRefType<float, 1> *x, StridedMemRefType<float, 2> *A,
-    StridedMemRefType<float, 1> *y, float alpha, float beta, int transA) {
-  // TODO: fill me.
-}
-
-extern "C" void _mlir_ciface_matmul_2x12x5(int transA, int transB,
-                                           StridedMemRefType<float, 2> *C,
-                                           StridedMemRefType<float, 2> *A,
-                                           StridedMemRefType<float, 2> *B,
-                                           int64_t alpha, int64_t beta,
-                                           int64_t dimForM, int64_t dimForN,
-                                           int64_t dimForK) {
-  matmulBlas(transA, transB, C, A, B, alpha, beta);
+  if (A_strides1 != B_strides1 || A_strides1 != C_strides1 || A_strides1 != 1 ||
+      A_sizes0 < A_strides1 || B_sizes0 < B_strides1 || C_sizes0 < C_strides1 ||
+      C_sizes0 != A_sizes0 || C_sizes1 != B_sizes1 || A_sizes1 != B_sizes0) {
+    printMemRefMetaData(std::cerr, A);
+    printMemRefMetaData(std::cerr, B);
+    printMemRefMetaData(std::cerr, C);
+    return;
+  }
+  matmulBlas(transA, transB, C, A, B, 1, 1);
 }
 
 extern "C" void
@@ -304,7 +259,7 @@ _mlir_ciface_linalg_fill_view1200x1000xf32_f32(StridedMemRefType<float, 2> *X,
   _mlir_ciface_linalg_fill_viewsxsxf32_f32(X, f);
 }
 
-#ifdef HAS_CPU_SUPPORT
+#ifdef HAS_TRANSPOSE_SUPPORT
 template <int D>
 inline memory::dims shapeToMklDnnDims(const StridedMemRefType<float, D> *T) {
   memory::dims dims(D);
@@ -373,7 +328,7 @@ void transposeBlas(StridedMemRefType<float, T> *S,
     // for (const auto elem : arrayPerm)
     //  std::cout << elem << "\n";
 
-#ifdef HAS_CPU_SUPPORT
+#ifdef HAS_TRANSPOSE_SUPPORT
   auto cpu_engine = engine(engine::kind::cpu, 0);
   memory::dims in_dims = shapeToMklDnnDims(S);
   memory::dims out_dims = shapeToMklDnnDims(D);
@@ -439,16 +394,6 @@ _mlir_ciface_linalg_fill_view5x3x4xf32_f32(StridedMemRefType<float, 3> *X,
   _mlir_ciface_linalg_fill_viewsxsxsxf32_f32_f32(X, f);
 }
 
-extern "C" void _mlir_ciface_matmul_2x3x20(int transA, int transB,
-                                           StridedMemRefType<float, 2> *C,
-                                           StridedMemRefType<float, 2> *A,
-                                           StridedMemRefType<float, 2> *B,
-                                           int64_t alpha, int64_t beta,
-                                           int64_t dimForM, int64_t dimForN,
-                                           int64_t dimForK) {
-  matmulBlas(transA, transB, C, A, B, alpha, beta);
-}
-
 extern "C" void
 _mlir_ciface_transpose_5x3x4_to_4x5x3(StridedMemRefType<float, 3> *S,
                                       StridedMemRefType<float, 3> *D, int *perm,
@@ -474,14 +419,6 @@ extern "C" void
 _mlir_ciface_linalg_fill_view1024x1024xf32_f32(StridedMemRefType<float, 2> *X,
                                                float f) {
   _mlir_ciface_linalg_fill_viewsxsxf32_f32(X, f);
-}
-
-extern "C" void _mlir_ciface_matmul_1024x1024x1024(
-    int transA, int transB, StridedMemRefType<float, 2> *C,
-    StridedMemRefType<float, 2> *A, StridedMemRefType<float, 2> *B,
-    int64_t alpha, int64_t beta, int64_t dimForM, int64_t dimForN,
-    int64_t dimForK) {
-  matmulBlas(transA, transB, C, A, B, alpha, beta);
 }
 
 extern "C" void
@@ -673,16 +610,6 @@ extern "C" void
 _mlir_ciface_linalg_fill_view2000xf32_f32(StridedMemRefType<float, 1> *X,
                                           float f) {
   _mlir_ciface_linalg_fill_viewsxf32_f32(X, f);
-}
-
-extern "C" void _mlir_ciface_matmul_32x32x64(int transA, int transB,
-                                             StridedMemRefType<float, 2> *C,
-                                             StridedMemRefType<float, 2> *A,
-                                             StridedMemRefType<float, 2> *B,
-                                             int64_t alpha, int64_t beta,
-                                             int64_t dimForM, int64_t dimForN,
-                                             int64_t dimForK) {
-  matmulBlas(transA, transB, C, A, B, alpha, beta);
 }
 
 // GPU - Support

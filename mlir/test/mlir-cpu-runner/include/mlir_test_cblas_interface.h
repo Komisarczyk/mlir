@@ -83,61 +83,14 @@ _mlir_ciface_linalg_dot_viewsxf32_viewsxf32_viewf32(
     StridedMemRefType<float, 0> *Z);
 
 extern "C" MLIR_TEST_CBLAS_INTERFACE_EXPORT void
-_mlir_ciface_linalg_matmul_viewsxsxf32_viewsxsxf32_viewsxsxf32(
-    StridedMemRefType<float, 2> *A, StridedMemRefType<float, 2> *B,
-    StridedMemRefType<float, 2> *C);
-
-extern "C" MLIR_TEST_CBLAS_INTERFACE_EXPORT void _mlir_ciface_matmul_42x42x42(
-    int transA, int transB, StridedMemRefType<float, 2> *C,
-    StridedMemRefType<float, 2> *A, StridedMemRefType<float, 2> *B,
-    int64_t alpha, int64_t beta, int64_t dimForM, int64_t dimForN,
-    int64_t dimForK);
-
-extern "C" MLIR_TEST_CBLAS_INTERFACE_EXPORT void _mlir_ciface_matmul_2x12x5(
-    int transA, int transB, StridedMemRefType<float, 2> *C,
-    StridedMemRefType<float, 2> *A, StridedMemRefType<float, 2> *B,
-    int64_t alpha, int64_t beta, int64_t dimForM, int64_t dimForN,
-    int64_t dimForK);
-
-extern "C" MLIR_TEST_CBLAS_INTERFACE_EXPORT void
-_mlir_ciface_matmul_800x900x1100(int transA, int transB,
-                                 StridedMemRefType<float, 2> *C,
-                                 StridedMemRefType<float, 2> *A,
-                                 StridedMemRefType<float, 2> *B, int64_t alpha,
-                                 int64_t beta, int64_t dimForM, int64_t dimForN,
-                                 int64_t dimForK);
-
-extern "C" MLIR_TEST_CBLAS_INTERFACE_EXPORT void
-_mlir_ciface_matmul_900x1100x1200(int transA, int transB,
-                                  StridedMemRefType<float, 2> *C,
-                                  StridedMemRefType<float, 2> *A,
-                                  StridedMemRefType<float, 2> *B, int64_t alpha,
-                                  int64_t beta, int64_t dimForM,
-                                  int64_t dimForN, int64_t dimForK);
-
-extern "C" MLIR_TEST_CBLAS_INTERFACE_EXPORT void
-_mlir_ciface_matmul_800x900x1000(int transA, int transB,
-                                 StridedMemRefType<float, 2> *C,
-                                 StridedMemRefType<float, 2> *A,
-                                 StridedMemRefType<float, 2> *B, int64_t alpha,
-                                 int64_t beta, int64_t dimForM, int64_t dimForN,
-                                 int64_t dimForK);
-
-extern "C" MLIR_TEST_CBLAS_INTERFACE_EXPORT void
-_mlir_ciface_matmul_800x1100x900(int transA, int transB,
-                                 StridedMemRefType<float, 2> *C,
-                                 StridedMemRefType<float, 2> *A,
-                                 StridedMemRefType<float, 2> *B, int64_t alpha,
-                                 int64_t beta, int64_t dimForM, int64_t dimForN,
-                                 int64_t dimForK);
-
-extern "C" MLIR_TEST_CBLAS_INTERFACE_EXPORT void
-_mlir_ciface_matmul_800x1200x900(int transA, int transB,
-                                 StridedMemRefType<float, 2> *C,
-                                 StridedMemRefType<float, 2> *A,
-                                 StridedMemRefType<float, 2> *B, int64_t alpha,
-                                 int64_t beta, int64_t dimForM, int64_t dimForN,
-                                 int64_t dimForK);
+_mlir_ciface_matmul_800x900x1100(
+    int transA, int transB, float *C_allocatedptr, float *C_alignedptr,
+    int64_t C_offset, int64_t C_sizes0, int64_t C_sizes1, int64_t C_strides0,
+    int64_t C_strides1, float *A_allocatedptr, float *A_alignedptr,
+    int64_t A_offset, int64_t A_sizes0, int64_t A_sizes1, int64_t A_strides0,
+    int64_t A_strides1, float *B_allocatedptr, float *B_alignedptr,
+    int64_t B_offset, int64_t B_sizes0, int64_t B_sizes1, int64_t B_strides0,
+    int64_t B_strides1, int alpha, int beta);
 
 extern "C" MLIR_TEST_CBLAS_INTERFACE_EXPORT void
 _mlir_ciface_matvec_2000x2000x2000(StridedMemRefType<float, 1> *x,
@@ -190,12 +143,6 @@ extern "C" MLIR_TEST_CBLAS_INTERFACE_EXPORT void
 _mlir_ciface_linalg_fill_view5x3x4xf32_f32(StridedMemRefType<float, 3> *X,
                                            float f);
 
-extern "C" MLIR_TEST_CBLAS_INTERFACE_EXPORT void _mlir_ciface_matmul_2x3x20(
-    int transA, int transB, StridedMemRefType<float, 2> *C,
-    StridedMemRefType<float, 2> *A, StridedMemRefType<float, 2> *B,
-    int64_t alpha, int64_t beta, int64_t dimForM, int64_t dimForN,
-    int64_t dimForK);
-
 extern "C" MLIR_TEST_CBLAS_INTERFACE_EXPORT void
 _mlir_ciface_transpose_5x3x4_to_4x5x3(StridedMemRefType<float, 3> *S,
                                       StridedMemRefType<float, 3> *D, int *perm,
@@ -212,14 +159,6 @@ _mlir_ciface_reshape_4x5x3_to_20x3(StridedMemRefType<float, 3> *S,
 extern "C" MLIR_TEST_CBLAS_INTERFACE_EXPORT void
 _mlir_ciface_linalg_fill_view1024x1024xf32_f32(StridedMemRefType<float, 2> *X,
                                                float f);
-
-extern "C" MLIR_TEST_CBLAS_INTERFACE_EXPORT void
-_mlir_ciface_matmul_1024x1024x1024(int transA, int transB,
-                                   StridedMemRefType<float, 2> *C,
-                                   StridedMemRefType<float, 2> *A,
-                                   StridedMemRefType<float, 2> *B,
-                                   int64_t alpha, int64_t beta, int64_t dimForM,
-                                   int64_t dimForN, int64_t dimForK);
 
 extern "C" MLIR_TEST_CBLAS_INTERFACE_EXPORT void
 _mlir_ciface_transpose_32x1024x32_to_32x32x1024(StridedMemRefType<float, 3> *S,
@@ -349,12 +288,6 @@ _mlir_ciface_linalg_fill_view1200x1000xf32_f32(StridedMemRefType<float, 2> *X,
 extern "C" MLIR_TEST_CBLAS_INTERFACE_EXPORT void
 _mlir_ciface_linalg_fill_view2000xf32_f32(StridedMemRefType<float, 1> *X,
                                           float f);
-
-extern "C" MLIR_TEST_CBLAS_INTERFACE_EXPORT void _mlir_ciface_matmul_32x32x64(
-    int transA, int transB, StridedMemRefType<float, 2> *C,
-    StridedMemRefType<float, 2> *A, StridedMemRefType<float, 2> *B,
-    int64_t alpha, int64_t beta, int64_t dimForM, int64_t dimForN,
-    int64_t dimForK);
 
 #ifdef HAS_GPU_SUPPORT
 extern "C" MLIR_TEST_CBLAS_INTERFACE_EXPORT void *
