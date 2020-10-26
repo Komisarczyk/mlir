@@ -742,65 +742,8 @@ getOrInsertFunction(OpBuilder &rewriter, ModuleOp module, std::string fName,
                           llvm::ArrayRef<mlir::NamedAttribute>{});
   return mlir::SymbolRefAttr::get(fName, context);
 }
-// LogicalResult MLIRCodegen::createBlasOperation(isl::id id) { return
-// failure(); }
-/* SmallVector<Value, 4> MLIRCodegen::getAccess(__isl_take pet_expr *expr) {
-  // there is next level of args to process
-  bool args = true;
-  pet_expr *header = expr;
-  mlir::Value symbol;
-  SmallVector<mlir::Value, 4> symbols;
-  pet_expr *arg0;
-  pet_expr *arg1;
-  while (args) {
-    args = false;
-    // first op
-    arg0 = pet_expr_get_arg(header, 0);
-    if (pet_expr_get_type(arg0) == pet_expr_op) {
-      args = true;
-      arg1 = pet_expr_get_arg(header, 1);
-      if (failed(getSymbol(arg1, symbol)))
-        llvm_unreachable("require a hit");
-      pet_expr_free(header);
-      header = arg0;
-      symbols.push_back(symbol);
-      pet_expr_free(arg1);
-    }
-    // second op
-    else {
-      arg1 = pet_expr_get_arg(header, 1);
-      if (pet_expr_get_type(arg1) == pet_expr_op) {
-        args = true;
 
-        if (failed(getSymbol(arg0, symbol)))
-          llvm_unreachable("require a hit");
-        pet_expr_free(header);
-        header = arg1;
-        symbols.push_back(symbol);
-        pet_expr_free(arg0);
-      }
-      // both access
-      else {
-
-        if (failed(getSymbol(arg0, symbol)))
-          llvm_unreachable("require a hit");
-        symbols.push_back(symbol);
-        // arg1 = pet_expr_get_arg(header, 1);
-        if (failed(getSymbol(arg1, symbol)))
-          llvm_unreachable("require a hit");
-        symbols.push_back(symbol);
-        pet_expr_free(arg0);
-        pet_expr_free(arg1);
-      }
-    }
-  }
-
-  pet_expr_free(header);
-  return symbols;
-} */
 SmallVector<Value, 4> MLIRCodegen::getAccess(std::vector<std::string> list) {
-  // there is next level of args to process
-
   mlir::Value symbol;
   SmallVector<mlir::Value, 4> symbols;
 
@@ -814,7 +757,7 @@ SmallVector<Value, 4> MLIRCodegen::getAccess(std::vector<std::string> list) {
   return symbols;
 }
 std::string
-composeFunctionNameForMatmul(const llvm::ArrayRef<mlir::Type> &types) {
+composeFunctionNameForMatMul(const llvm::ArrayRef<mlir::Type> &types) {
   assert((types.size() == 3) && "expect 3 types");
   auto AShape = types[1].dyn_cast<mlir::MemRefType>().getShape();
   auto CShape = types[0].dyn_cast<mlir::MemRefType>().getShape();
@@ -823,10 +766,27 @@ composeFunctionNameForMatmul(const llvm::ArrayRef<mlir::Type> &types) {
             std::to_string(AShape[1]);
   return result;
 }
+std::string
+composeFunctionNameForMatVec(const llvm::ArrayRef<mlir::Type> &types) {
+  assert((types.size() == 3) && "expect 3 types");
+  auto AShape = types[0].dyn_cast<mlir::MemRefType>().getShape();
+  std::string result = "matvec_";
+  result += std::to_string(AShape[0]) + "x" + std::to_string(AShape[1]);
+  return result;
+}
 template <typename... Args>
-std::string composeFunctionCallName(const Args... args) {
+std::string composeFunctionCallName(LTOps name ,const Args... args) {
+  LLVM_DEBUG(dbgs() << __func__ << "\n");
   llvm::ArrayRef<mlir::Type> types = {args...};
-  return composeFunctionNameForMatmul(types);
+  switch(name){
+    case LTOps::MatMul:
+  return composeFunctionNameForMatMul(types);
+    case LTOps::MatVec:
+  return composeFunctionNameForMatVec(types);
+  default:
+    llvm_unreachable("not expected here");
+    return NULL;
+  }
 }
 LogicalResult MLIRCodegen::createBlasOperation(Value A, Value B, Value C) {
   // auto module = val.getParentOfType<ModuleOp>();
@@ -834,7 +794,7 @@ LogicalResult MLIRCodegen::createBlasOperation(Value A, Value B, Value C) {
   // auto valueAttr = builder_.getFloatAttr(builder_.getF32Type(), 1);
   // auto beta = builder_.create<ConstantOp>(loc, builder_.getF32Type(),
   // valueAttr); auto module = beta.getParentOfType<ModuleOp>();
-  /*auto fn = composeFunctionCallName(
+  /*auto fn = composeFunctionCallName(LTOps::MatMul,
       llvm::ArrayRef<mlir::Type>{C.getType(), A.getType(), B.getType()});
 
   auto symbolFn = getOrInsertFunction(
@@ -845,6 +805,24 @@ LogicalResult MLIRCodegen::createBlasOperation(Value A, Value B, Value C) {
                           llvm::ArrayRef<Value>{A, B, C, alpha, beta});
   */
   builder_.create<linalg::MatmulOp>(loc, A, B, C);
+  return success();
+}
+LogicalResult MLIRCodegen::createMatVecOperation(Value A, Value B, Value C) {
+  auto loc = builder_.getUnknownLoc();
+   auto valueAttr = builder_.getFloatAttr(builder_.getF32Type(), 1);
+   auto beta = builder_.create<ConstantOp>(loc, builder_.getF32Type(), valueAttr); 
+  auto module = beta.getParentOfType<ModuleOp>();
+  auto fn = composeFunctionCallName(LTOps::MatVec,
+      llvm::ArrayRef<mlir::Type>{A.getType(), B.getType(), C.getType()});
+
+  auto symbolFn = getOrInsertFunction(
+      builder_, module, fn,
+      llvm::ArrayRef<mlir::Type>{A.getType(), B.getType(), C.getType(),
+                                 beta.getType(), beta.getType()});
+  builder_.create<CallOp>(loc, symbolFn, llvm::ArrayRef<Type>{},
+                          llvm::ArrayRef<Value>{A, B, C, beta, beta});
+  
+
   return success();
 }
 /*
@@ -1266,7 +1244,7 @@ void MLIRCodegen::runPasses() {
   mlir::OpPassManager &optPM = pm.nest<mlir::FuncOp>();
   //optPM.addPass(mlir::createTensorDataFlowOptPass());
   //optPM.addPass(mlir::toy::createShapeInferencePass());
-  //optPM.addPass(mlir::createCanonicalizerPass());
+ //optPM.addPass(mlir::createCanonicalizerPass());
   // optPM.addPass(mlir::createCSEPass());
 
   if (mlir::failed(pm.run(theModule_)))

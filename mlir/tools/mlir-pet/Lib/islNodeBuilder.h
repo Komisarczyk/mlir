@@ -46,6 +46,8 @@ private:
   void createBlasOperation(std::vector<std::string> list);
   // create transpose operation.
   void createTransposeOperation(std::vector<std::string> list);
+  // create MatVec operation.
+  void createMatVecOperation(std::vector<std::string> list);
 };
 
 } // end namespace codegen

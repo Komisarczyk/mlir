@@ -135,6 +135,7 @@ public:
   llvm::SmallVector<mlir::Value, 4> getAccess(std::vector<std::string> list);
   mlir::LogicalResult createBlasOperation(mlir::Value A, mlir::Value B,
                                           mlir::Value C);
+  mlir::LogicalResult createMatVecOperation(mlir::Value A, mlir::Value B, mlir::Value C);
   mlir::LogicalResult createTransposeOperation(mlir::Value A, mlir::Value B);
 
 private:
@@ -255,7 +256,7 @@ private:
   mlir::LogicalResult getIndexes(isl::multi_pw_aff muaff,
                                  llvm::SmallVector<mlir::Value, 4> &loopIvs);
 };
-
+enum class LTOps{MatMul, MatVec, Transpose};
 } // end namespace codegen
 
 #endif

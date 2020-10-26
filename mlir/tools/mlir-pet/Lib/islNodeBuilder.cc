@@ -188,6 +188,14 @@ void IslNodeBuilder::createTransposeOperation(std::vector<std::string> list) {
     llvm_unreachable("cannot generate blas function");
   }
 }
+void IslNodeBuilder::createMatVecOperation(std::vector<std::string> list) {
+  auto vec = MLIRBuilder_.getAccess(list);
+
+  if (failed(MLIRBuilder_.createMatVecOperation(vec[1], vec[2], vec[0]))) {
+    MLIRBuilder_.dump();
+    llvm_unreachable("cannot generate blas function");
+  }
+}
 
 void IslNodeBuilder::createBlasOperation(std::vector<std::string> list) {
   /*  // get to the user
@@ -284,10 +292,13 @@ void IslNodeBuilder::MLIRFromISLAstImpl(isl::ast_node node) {
   case isl_ast_node_block:
     createBlock(node);
     return;
+  case isl_ast_node_if:
+    createIf(node);
+    return;
   case isl_ast_node_mark: {
     auto name = node.mark_get_id().get_name();
 
-    outs() << name;
+    //outs() << name;
     if (!std::string(name).compare(std::string("MatMul"))) {
       std::vector<std::string> *vector;
       vector = (std::vector<std::string> *)(node.mark_get_id().get_user());
@@ -300,9 +311,20 @@ void IslNodeBuilder::MLIRFromISLAstImpl(isl::ast_node node) {
       std::vector<std::string> *vector;
       vector = (std::vector<std::string> *)(node.mark_get_id().get_user());
        for(auto s : *vector){
-         outs() << "\n" << s << "\n";
+        // outs() << "\n" << s << "\n";
        }
       createTransposeOperation(*vector);
+      delete vector;
+      return;
+
+     } else if (!std::string(name).compare(std::string("MatVec"))) {
+
+      std::vector<std::string> *vector;
+      vector = (std::vector<std::string> *)(node.mark_get_id().get_user());
+       for(auto s : *vector){
+        // outs() << "\n" << s << "\n";
+       }
+      createMatVecOperation(*vector);
       delete vector;
       return;
     } else {
@@ -310,9 +332,7 @@ void IslNodeBuilder::MLIRFromISLAstImpl(isl::ast_node node) {
     }
     return;
   }
-  case isl_ast_node_if:
-    createIf(node);
-    return;
+
   }
   llvm_unreachable("unknown isl_ast_node_type");
 }
