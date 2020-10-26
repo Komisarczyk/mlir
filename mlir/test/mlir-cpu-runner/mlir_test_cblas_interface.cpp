@@ -17,14 +17,15 @@
 #include <iostream>
 #include <string.h>
 #include <vector>
-#define HAS_CPU_SUPPORT
+//#define HAS_CPU_SUPPORT
+#define HAS_GPU_SUPPORT
 #ifdef HAS_CPU_SUPPORT
 #include "dnnl.hpp"
 using namespace dnnl;
 #endif
 
 #ifdef HAS_GPU_SUPPORT
-#include <cublas_v2.h>
+#include "cublas_v2.h"
 #include <cuda_runtime.h>
 #endif
 
@@ -133,25 +134,19 @@ extern "C" void _mlir_ciface_linalg_dot_viewsxf32_viewsxf32_viewf32(
                            Y->data + Y->offset, Y->strides[0]);
 }
 
-extern "C" void _mlir_ciface_linalg_matmul_viewsxsxf32_viewsxsxf32_viewsxsxf32(
-    StridedMemRefType<float, 2> *A, StridedMemRefType<float, 2> *B,
-    StridedMemRefType<float, 2> *C) {
-  if (A->strides[1] != B->strides[1] || A->strides[1] != C->strides[1] ||
-      A->strides[1] != 1 || A->sizes[0] < A->strides[1] ||
-      B->sizes[0] < B->strides[1] || C->sizes[0] < C->strides[1] ||
-      C->sizes[0] != A->sizes[0] || C->sizes[1] != B->sizes[1] ||
-      A->sizes[1] != B->sizes[0]) {
-    printMemRefMetaData(std::cerr, *A);
-    printMemRefMetaData(std::cerr, *B);
-    printMemRefMetaData(std::cerr, *C);
-    return;
-  }
+static inline int compare(float *a, float *b, int M, int N)
+{
 
-  mlir_test_cblas_sgemm(
-      CBLAS_ORDER::CblasRowMajor, CBLAS_TRANSPOSE::CblasNoTrans,
-      CBLAS_TRANSPOSE::CblasNoTrans, C->sizes[0], C->sizes[1], A->sizes[1],
-      1.0f, A->data + A->offset, A->strides[0], B->data + B->offset,
-      B->strides[0], 1.0f, C->data + C->offset, C->strides[0]);
+	/* Compare elements */
+  for (int64_t x = 0; x < M; x++)
+	for (int64_t y = 0; y < N; y++)
+
+			if (a[x*N + y] != b[x*N + y]){
+        printf("\n %f %f  %d %d\n", a[x*N + y], b[x*N + y], x ,y);
+				return 0;
+			}
+
+	return 1;
 }
 
 void matmulBlas(int transA, int transB, StridedMemRefType<float, 2> &C,
@@ -186,7 +181,7 @@ extern "C" void _mlir_ciface_matmul_800x900x1100(
     int64_t A_strides1, float *B_allocatedptr, float *B_alignedptr,
     int64_t B_offset, int64_t B_sizes0, int64_t B_sizes1, int64_t B_strides0,
     int64_t B_strides1, int alpha, int beta) {
-
+  #ifdef HAS_CPU_SUPPORT
   StridedMemRefType<float, 2> C;
   C.basePtr = C_allocatedptr;
   C.data = C_alignedptr;
@@ -220,8 +215,70 @@ extern "C" void _mlir_ciface_matmul_800x900x1100(
     printMemRefMetaData(std::cerr, C);
     return;
   }
-  matmulBlas(transA, transB, C, A, B, 1, 1);
+
+  sgemm(transA, transB, C_sizes0, C_sizes1, A_sizes1, 1.0f, A_alignedptr + A_offset, A_sizes1,
+            B_alignedptr + B_offset, C_sizes1, (float)beta, C_alignedptr + C_offset, C_sizes1);
+  //matmulBlas(transA, transB, C, A, B, 1, 1);
+  #endif
+  #ifdef HAS_GPU_SUPPORT
+  
+  size_t M = C_sizes0;
+  size_t N = C_sizes1;
+  size_t K = A_sizes1;
+/*
+  #define IDX2C(i,j,ld) (((j)*(ld))+(i))
+  StridedMemRefType<float, 2> C;
+  for (i = 0; i < M; i++) {
+    for (j = 0; j < N; j++) {
+    
+        C.data[IDX2C(i,j,M)] = (float)(C_alignedptr[i,j]);
+    }
+  }
+
+  StridedMemRefType<float, 2> A;
+  for (i = 0; i < M; i++) {
+    for (j = 0; j < K; j++) {
+    
+        A.data[IDX2C(i,j,M)] = (float)(A_alignedptr[i,j]);
+    }
+  }
+  StridedMemRefType<float, 2> B;
+  for (i = 0; i < K; i++) {
+    for (j = 0; j < N; j++) {
+    
+        B.data[IDX2C(i,j,K)] = (float)(B_alignedptr[i,j]);
+    }
+  }
+*/
+  StridedMemRefType<float, 2> C;
+  C.basePtr = C_allocatedptr;
+  C.data = C_alignedptr;
+  C.offset = C_offset;
+  C.sizes[0] = C_sizes0;
+  C.sizes[1] = C_sizes1;
+  C.strides[0] = C_strides0;
+  C.strides[1] = C_strides1;
+  StridedMemRefType<float, 2> A;
+  A.basePtr = A_allocatedptr;
+  A.data = A_alignedptr;
+  A.offset = A_offset;
+  A.sizes[0] = A_sizes0;
+  A.sizes[1] = A_sizes1;
+  A.strides[0] = A_strides0;
+  A.strides[1] = A_strides1;
+  StridedMemRefType<float, 2> B;
+  B.basePtr = B_allocatedptr;
+  B.data = B_alignedptr;
+  B.offset = B_offset;
+  B.sizes[0] = B_sizes0;
+  B.sizes[1] = B_sizes1;
+  B.strides[0] = B_strides0;
+  B.strides[1] = B_strides1;
+  matmulcuBlas(C.data, A.data, B.data, M, N, K);
+  #endif
 }
+
+
 
 extern "C" void
 _mlir_ciface_linalg_fill_view42x42xf32_f32(StridedMemRefType<float, 2> *X,
@@ -611,84 +668,118 @@ _mlir_ciface_linalg_fill_view2000xf32_f32(StridedMemRefType<float, 1> *X,
                                           float f) {
   _mlir_ciface_linalg_fill_viewsxf32_f32(X, f);
 }
+void printmatrix(float* A, int M, int N){
+  
+  	for (int64_t x = 0; x < M; x++)
+	{
+		for (int64_t y = 0; y < N; y++)
+		{
+			printf("%f%s",
+				   *(A + x * N + y),
+				   y == N - 1 ? "" : " ");
+		}
 
+		puts("");
+	}
+
+}
 // GPU - Support
-
 #ifdef HAS_GPU_SUPPORT
-extern "C" void *_mlir_ciface_allocateMemoryForDevice(int64_t size) {
-  std::cout << __func__ << "\n";
-  cudaError_t error;
-  cudaDeviceProp deviceProp;
-  int devId = 0;
+extern "C" int matmulcuBlas(float* C,
+                float* A, float* B,int M, int N, int K){
+    cudaError_t cudaStat;
+    cublasStatus_t stat;
+    cublasHandle_t handle;
+    float* devPtrC;
+    float* devPtrA;
+    float* devPtrB;
 
-  error = cudaGetDeviceProperties(&deviceProp, devId);
-  if (error != cudaSuccess) {
-    std::cout << "failure!\n";
-    assert(0);
-  }
-  std::cout << deviceProp.name << "\n";
-  std::cout << deviceProp.major << "\n";
-  std::cout << deviceProp.minor << "\n";
-
-  void *d_A;
-  error = cudaMalloc((void **)&d_A, size);
-  if (error != cudaSuccess) {
-    std::cout << "failure\n";
-    assert(0);
-  }
-  return d_A;
-}
-
-extern "C" void
-_mlir_ciface_createCallCopyFromHostToDevice(StridedMemRefType<float, 2> *S,
-                                            void *D, int64_t size) {
-  std::cout << __func__ << "\n";
-  cudaError_t error;
-  error = cudaMemcpy(D, S->data, size, cudaMemcpyHostToDevice);
-  if (error != cudaSuccess) {
-    std::cout << "failure\n";
-    assert(0);
-  }
-}
-
-// TODO: use memref to compute lda, ldb, ldc, N, M, K.
-extern "C" void
-_mlir_ciface_createCallToCublasSgemm(void *C, void *A, void *B,
-                                     StridedMemRefType<float, 2> *CMemref,
-                                     StridedMemRefType<float, 2> *AMemref,
-                                     StridedMemRefType<float, 2> *BMemref) {
-  std::cout << __func__ << "\n";
-  cublasStatus_t error;
-  cublasHandle_t handle;
-  error = cublasCreate(&handle);
-  if (error != CUBLAS_STATUS_SUCCESS) {
-    std::cout << "failure\n";
-    assert(0);
-  }
-
-  float alpha = 1.0;
-  float beta = 1.0;
-  for (size_t i = 0; i < 1; i++) {
-    error = cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, 1024, 1024, 1024,
-                        &alpha, (float *)B, 1024, (float *)A, 1024, &beta,
-                        (float *)C, 1024);
-    if (error != CUBLAS_STATUS_SUCCESS) {
-      std::cout << "failure\n";
-      assert(0);
+    //allocate CUDA memory
+    cudaStat = cudaMalloc ((void**)&devPtrC, M*N*sizeof(float));
+    if (cudaStat != cudaSuccess) {
+        printf ("device memory allocation failed");
+        return EXIT_FAILURE;
     }
-  }
 
-  cublasDestroy(handle);
-}
+    cudaStat = cudaMalloc ((void**)&devPtrA, M*K*sizeof(float));
+    if (cudaStat != cudaSuccess) {
+        printf ("device memory allocation failed");
+        cudaFree (devPtrC);
+        return EXIT_FAILURE;
+    }
+        cudaStat = cudaMalloc ((void**)&devPtrB, K*N*sizeof(float));
+    if (cudaStat != cudaSuccess) {
+        cudaFree (devPtrA);
+        cudaFree (devPtrC);
+        printf ("device memory allocation failed");
+        return EXIT_FAILURE;
+    }
+    stat = cublasCreate(&handle);
+    if (stat != CUBLAS_STATUS_SUCCESS) {
+              cudaFree (devPtrA);
+        cudaFree (devPtrB);
+        cudaFree (devPtrC);
+        printf ("CUBLAS initialization failed\n");
+        return EXIT_FAILURE;
+    }
+    //set CUDA memory
+/*
+    stat = cublasSetMatrix (N, M, sizeof(float), C, N, devPtrC, N);
+    if (stat != CUBLAS_STATUS_SUCCESS) {
+        printf ("data download failed");
+        cudaFree (devPtrC);
+        cublasDestroy(handle);
+        return EXIT_FAILURE;
+    }
+*/
+        stat = cublasSetMatrix (K, M, sizeof(float), A, K, devPtrA, K);
+    if (stat != CUBLAS_STATUS_SUCCESS) {
+        printf ("data download failed");
+              cudaFree (devPtrA);
+        cudaFree (devPtrB);
+        cudaFree (devPtrC);
+        cublasDestroy(handle);
+        return EXIT_FAILURE;
+    }
 
-extern "C" void _mlir_ciface_createCallCopyFromDeviceToHost(
-    void *S, StridedMemRefType<float, 2> *D, int64_t size) {
-  std::cout << __func__ << std::endl;
-  cudaError_t error;
-  error = cudaMemcpy(D->data, S, size, cudaMemcpyDeviceToHost);
-  if (error != cudaSuccess) {
-    std::cout << "failure\n";
-    assert(0);
-  }
+        stat = cublasSetMatrix (N, K, sizeof(float), B, N, devPtrB, N);
+    if (stat != CUBLAS_STATUS_SUCCESS) {
+        printf ("data download failed");
+              cudaFree (devPtrA);
+        cudaFree (devPtrB);
+        cudaFree (devPtrC);
+        cublasDestroy(handle);
+        return EXIT_FAILURE;
+    }
+
+
+    float alpha = 1.0f;
+   // modify (handle, cublasOperation_t::CUBLAS_OP_T, cublasOperation_t::CUBLAS_OP_T, devPtrA, M, N, K, 1.0f, devPtrA, K, devPtrB, N, 1.0f,devPtrC, M);
+                                                                                                //M?
+    stat = cublasSgemm( handle, CUBLAS_OP_N, CUBLAS_OP_N, N, M, K, &alpha, devPtrB, N, devPtrA, K, &alpha, devPtrC, N);
+        // Check for any errors launching the kernel
+    if (stat != CUBLAS_STATUS_SUCCESS) {
+        printf ("gemm failed");
+        printf ("\n %d \n", stat);
+        cudaFree (devPtrA);
+        cudaFree (devPtrB);
+        cudaFree (devPtrC);
+        cublasDestroy(handle);
+        return EXIT_FAILURE;
+    }
+    stat = cublasGetMatrix (N, M, sizeof(float), devPtrC, N, C, N);
+    if (stat != CUBLAS_STATUS_SUCCESS) {
+        printf ("data upload failed");
+        cudaFree (devPtrA);
+        cudaFree (devPtrB);
+        cudaFree (devPtrC);
+        cublasDestroy(handle);
+        return EXIT_FAILURE;
+    }
+    cudaFree (devPtrC);
+    cudaFree (devPtrA);
+    cudaFree (devPtrB);
+    cublasDestroy(handle);
+    return EXIT_SUCCESS;
 }
 #endif

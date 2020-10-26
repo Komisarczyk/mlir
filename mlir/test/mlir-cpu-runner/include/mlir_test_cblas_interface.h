@@ -288,7 +288,8 @@ _mlir_ciface_linalg_fill_view1200x1000xf32_f32(StridedMemRefType<float, 2> *X,
 extern "C" MLIR_TEST_CBLAS_INTERFACE_EXPORT void
 _mlir_ciface_linalg_fill_view2000xf32_f32(StridedMemRefType<float, 1> *X,
                                           float f);
-
+extern "C" MLIR_TEST_CBLAS_INTERFACE_EXPORT int matmulcuBlas(float* C,
+                float* A, float* B,int M, int N, int K);
 #ifdef HAS_GPU_SUPPORT
 extern "C" MLIR_TEST_CBLAS_INTERFACE_EXPORT void *
 _mlir_ciface_allocateMemoryForDevice(int64_t size);
