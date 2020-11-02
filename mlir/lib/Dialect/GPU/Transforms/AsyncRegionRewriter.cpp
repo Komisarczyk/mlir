@@ -108,10 +108,11 @@ struct GpuAsyncRegionPass::Callback {
 // inserts the necessary synchronization (as gpu.wait ops). Assumes sequential
 // execution semantics and that no GPU ops are asynchronous yet.
 void GpuAsyncRegionPass::runOnFunction() {
-  if (getFunction()
+ /* if (getFunction()
           .getRegion()
           .walk(Callback{OpBuilder(&getContext())})
           .wasInterrupted())
+    return signalPassFailure();*/
     return signalPassFailure();
 }
 
