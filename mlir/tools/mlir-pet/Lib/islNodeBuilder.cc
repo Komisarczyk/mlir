@@ -189,9 +189,11 @@ void IslNodeBuilder::createTransposeOperation(std::vector<std::string> list) {
   }
 }
 void IslNodeBuilder::createMatVecOperation(std::vector<std::string> list) {
+  int rhs = std::stoi(list.back());
+  list.pop_back();
   auto vec = MLIRBuilder_.getAccess(list);
 
-  if (failed(MLIRBuilder_.createMatVecOperation(vec[1], vec[2], vec[0]))) {
+  if (failed(MLIRBuilder_.createMatVecOperation(vec[1], vec[2], vec[0], rhs))) {
     MLIRBuilder_.dump();
     llvm_unreachable("cannot generate blas function");
   }

@@ -542,7 +542,8 @@ populateLinalgToStandardConversionPatterns(OwningRewritePatternList &patterns,
       LinalgOpConversion<GenericOp>,
       LinalgOpConversion<IndexedGenericOp>,
       LinalgOpConversion<MatmulOp>,
-      LinalgOpConversion<MatvecOp>>(ctx);
+      LinalgOpConversion<MatvecOp>,
+      LinalgOpConversion<VecmatOp>>(ctx);
   // clang-format on
 }
 

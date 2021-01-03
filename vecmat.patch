@@ -1,0 +1,120 @@
+From 5638df195048eef74d4ec2633f8fb6f3dd935f1d Mon Sep 17 00:00:00 2001
+From: Eugene Burmako <burmako@google.com>
+Date: Thu, 10 Sep 2020 18:48:13 +0200
+Subject: [PATCH] Introduce linalg.vecmat
+
+This patch adds a new named structured op to accompany linalg.matmul and
+linalg.matvec. We needed it for our codegen, so I figured it would be useful
+to add it to Linalg.
+
+Reviewed By: nicolasvasilache, mravishankar
+
+Differential Revision: https://reviews.llvm.org/D87292
+---
+ mlir/include/mlir/Dialect/Linalg/EDSC/Intrinsics.h         | 1 +
+ .../mlir/Dialect/Linalg/IR/LinalgNamedStructuredOpsSpec.tc | 7 ++++++-
+ mlir/lib/Conversion/LinalgToStandard/LinalgToStandard.cpp  | 1 +
+ mlir/lib/Dialect/Linalg/IR/LinalgOps.cpp                   | 1 +
+ mlir/lib/Dialect/Linalg/Transforms/Loops.cpp               | 2 ++
+ mlir/lib/Dialect/Linalg/Transforms/Vectorization.cpp       | 2 +-
+ mlir/test/lib/Transforms/TestLinalgTransforms.cpp          | 1 +
+ 7 files changed, 13 insertions(+), 2 deletions(-)
+
+diff --git a/mlir/include/mlir/Dialect/Linalg/EDSC/Intrinsics.h b/mlir/include/mlir/Dialect/Linalg/EDSC/Intrinsics.h
+index 399c49d1e572..d842069f6570 100644
+--- a/mlir/include/mlir/Dialect/Linalg/EDSC/Intrinsics.h
++++ b/mlir/include/mlir/Dialect/Linalg/EDSC/Intrinsics.h
+@@ -20,6 +20,7 @@ using linalg_dot = OperationBuilder<linalg::DotOp>;
+ using linalg_fill = OperationBuilder<linalg::FillOp>;
+ using linalg_matmul = OperationBuilder<linalg::MatmulOp>;
+ using linalg_matvec = OperationBuilder<linalg::MatvecOp>;
++using linalg_vecmat = OperationBuilder<linalg::VecmatOp>;
+ using linalg_range = ValueBuilder<linalg::RangeOp>;
+ using linalg_reshape = ValueBuilder<linalg::ReshapeOp>;
+ using linalg_slice = ValueBuilder<linalg::SliceOp>;
+diff --git a/mlir/include/mlir/Dialect/Linalg/IR/LinalgNamedStructuredOpsSpec.tc b/mlir/include/mlir/Dialect/Linalg/IR/LinalgNamedStructuredOpsSpec.tc
+index 9c54a5f0c3c7..765e045e9e77 100644
+--- a/mlir/include/mlir/Dialect/Linalg/IR/LinalgNamedStructuredOpsSpec.tc
++++ b/mlir/include/mlir/Dialect/Linalg/IR/LinalgNamedStructuredOpsSpec.tc
+@@ -8,6 +8,11 @@ def matvec(A: f32(M, N), y: f32(N)) -> (x: f32(M)) {
+   x(m) = std_addf<n>(std_mulf(A(m, n), y(n)));
+ }
+ 
++ods_def<VecmatOp>:
++def vecmat(y: f32(M), A: f32(M, N)) -> (x: f32(N)) {
++  x(n) = std_addf<m>(std_mulf(y(m), A(m, n)));
++}
++
+ ods_def<DotOp>:
+ def dot(A: f32(M), B: f32(M)) -> (C: f32()) {
+   C() = std_addf<m>(std_mulf(A(m), B(m)));
+@@ -66,4 +71,4 @@ ods_def<ConvNCDHWOp>:
+ def conv_3d_ncdhw(I: f32(N, C, D, H, W), K: f32(F, C, KD, KH, KW)) -> (O: f32(N, F, D, H, W)) {
+   O(n, f, d, h, w) = std_addf<kd, kh, kw>(std_mulf(
+     I(n, c, d + kd, h + kh, w + kw), K(f, c, kd, kh, kw)));
+-}
+\ No newline at end of file
++}
+diff --git a/mlir/lib/Conversion/LinalgToStandard/LinalgToStandard.cpp b/mlir/lib/Conversion/LinalgToStandard/LinalgToStandard.cpp
+index d56dffdd0dc1..93b7764a6a77 100644
+--- a/mlir/lib/Conversion/LinalgToStandard/LinalgToStandard.cpp
++++ b/mlir/lib/Conversion/LinalgToStandard/LinalgToStandard.cpp
+@@ -244,6 +244,7 @@ void mlir::populateLinalgToStandardConversionPatterns(
+       LinalgOpConversion<DotOp>,
+       LinalgOpConversion<BatchMatmulOp>,
+       LinalgOpConversion<MatvecOp>,
++      LinalgOpConversion<VecmatOp>,
+       LinalgOpConversion<MatmulOp>,
+       LinalgOpConversion<ConvWOp>,
+       LinalgOpConversion<ConvNWCOp>,
+diff --git a/mlir/lib/Dialect/Linalg/IR/LinalgOps.cpp b/mlir/lib/Dialect/Linalg/IR/LinalgOps.cpp
+index c9b05f89f30b..fcead984dfe5 100644
+--- a/mlir/lib/Dialect/Linalg/IR/LinalgOps.cpp
++++ b/mlir/lib/Dialect/Linalg/IR/LinalgOps.cpp
+@@ -1350,6 +1350,7 @@ CANONICALIZERS_AND_FOLDERS(BatchMatmulOp)
+ CANONICALIZERS_AND_FOLDERS(DotOp)
+ CANONICALIZERS_AND_FOLDERS(MatmulOp)
+ CANONICALIZERS_AND_FOLDERS(MatvecOp)
++CANONICALIZERS_AND_FOLDERS(VecmatOp)
+ CANONICALIZERS_AND_FOLDERS(ConvWOp)
+ CANONICALIZERS_AND_FOLDERS(ConvNWCOp)
+ CANONICALIZERS_AND_FOLDERS(ConvNCWOp)
+diff --git a/mlir/lib/Dialect/Linalg/Transforms/Loops.cpp b/mlir/lib/Dialect/Linalg/Transforms/Loops.cpp
+index d4d1d108be71..d3c90ffab06f 100644
+--- a/mlir/lib/Dialect/Linalg/Transforms/Loops.cpp
++++ b/mlir/lib/Dialect/Linalg/Transforms/Loops.cpp
+@@ -679,6 +679,8 @@ static Optional<LinalgLoops> linalgOpToLoopsImplSwitch(Operation *op,
+     return linalgOpToLoopsImpl<LoopTy, MatmulOp>(op, builder);
+   if (isa<MatvecOp>(op))
+     return linalgOpToLoopsImpl<LoopTy, MatvecOp>(op, builder);
++  if (isa<VecmatOp>(op))
++    return linalgOpToLoopsImpl<LoopTy, VecmatOp>(op, builder);
+   if (isa<DotOp>(op))
+     return linalgOpToLoopsImpl<LoopTy, DotOp>(op, builder);
+   if (isa<BatchMatmulOp>(op))
+diff --git a/mlir/lib/Dialect/Linalg/Transforms/Vectorization.cpp b/mlir/lib/Dialect/Linalg/Transforms/Vectorization.cpp
+index f4aabf8a8302..a8b11a48df17 100644
+--- a/mlir/lib/Dialect/Linalg/Transforms/Vectorization.cpp
++++ b/mlir/lib/Dialect/Linalg/Transforms/Vectorization.cpp
+@@ -69,7 +69,7 @@ static bool hasMultiplyAddBody(Region &r) {
+ static LogicalResult isContraction(Operation *op) {
+   // TODO: interface for named ops.
+   if (isa<linalg::BatchMatmulOp, linalg::MatmulOp, linalg::MatvecOp,
+-          linalg::DotOp>(op))
++          linalg::VecmatOp, linalg::DotOp>(op))
+     return success();
+ 
+   auto genericOp = dyn_cast<linalg::GenericOp>(op);
+diff --git a/mlir/test/lib/Transforms/TestLinalgTransforms.cpp b/mlir/test/lib/Transforms/TestLinalgTransforms.cpp
+index 4fc880a24277..edcc66c9b6a6 100644
+--- a/mlir/test/lib/Transforms/TestLinalgTransforms.cpp
++++ b/mlir/test/lib/Transforms/TestLinalgTransforms.cpp
+@@ -449,6 +449,7 @@ static void applyContractionToVectorPatterns(FuncOp funcOp) {
+   patterns.insert<LinalgVectorizationPattern<BatchMatmulOp>,
+                   LinalgVectorizationPattern<MatmulOp>,
+                   LinalgVectorizationPattern<MatvecOp>,
++                  LinalgVectorizationPattern<VecmatOp>,
+                   LinalgVectorizationPattern<DotOp>,
+                   LinalgVectorizationPattern<GenericOp>>(funcOp.getContext());
+   applyPatternsAndFoldGreedily(funcOp, patterns);
+

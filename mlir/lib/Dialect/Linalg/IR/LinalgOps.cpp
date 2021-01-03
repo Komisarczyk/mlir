@@ -1059,6 +1059,10 @@ LogicalResult MatvecOp::fold(ArrayRef<Attribute>,
                              SmallVectorImpl<OpFoldResult> &) {
   return foldMemRefCast(*this);
 }
+LogicalResult VecmatOp::fold(ArrayRef<Attribute>,
+                             SmallVectorImpl<OpFoldResult> &) {
+  return foldMemRefCast(*this);
+}
 LogicalResult MatmulOp::fold(ArrayRef<Attribute>,
                              SmallVectorImpl<OpFoldResult> &) {
   return foldMemRefCast(*this);

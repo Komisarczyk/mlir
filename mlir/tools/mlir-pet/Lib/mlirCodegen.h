@@ -135,7 +135,7 @@ public:
   llvm::SmallVector<mlir::Value, 4> getAccess(std::vector<std::string> list);
   mlir::LogicalResult createBlasOperation(mlir::Value A, mlir::Value B,
                                           mlir::Value C);
-  mlir::LogicalResult createMatVecOperation(mlir::Value A, mlir::Value B, mlir::Value C);
+  mlir::LogicalResult createMatVecOperation(mlir::Value A, mlir::Value B, mlir::Value C, int rhs);
   mlir::LogicalResult createTransposeOperation(mlir::Value A, mlir::Value B);
 
 private:

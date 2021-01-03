@@ -269,7 +269,21 @@ public:
     C(i) = C(i) + A(i, r_j) * B(r_j);
   }
 };
-
+template <typename IndexedValueType>
+class LinalgScopedEmitter<IndexedValueType, VecmatOp> {
+public:
+  static void emitScalarImplementation(ArrayRef<Value> allIvs,
+                                       VecmatOp vecmatOp) {
+    assert(vecmatOp.hasBufferSemantics() &&
+           "expected linalg op with buffer semantics");
+    assert(allIvs.size() == 2);
+    Value i(allIvs[0]), r_j(allIvs[1]);
+    IndexedValueType A(vecmatOp.getInput(0)), B(vecmatOp.getInput(1)),
+        C(vecmatOp.getOutputBuffer(0));
+    // Emit scalar form.
+    C(i) = C(i) + A(r_j) * B(i, r_j);
+  }
+};
 template <typename IndexedValueType>
 class LinalgScopedEmitter<IndexedValueType, MatmulOp> {
 public:
@@ -808,6 +822,7 @@ INSTANTIATE_LINALG_OP_TO_LOOPS(CopyOp)
 INSTANTIATE_LINALG_OP_TO_LOOPS(FillOp)
 INSTANTIATE_LINALG_OP_TO_LOOPS(DotOp)
 INSTANTIATE_LINALG_OP_TO_LOOPS(MatvecOp)
+INSTANTIATE_LINALG_OP_TO_LOOPS(VecmatOp)
 INSTANTIATE_LINALG_OP_TO_LOOPS(MatmulOp)
 INSTANTIATE_LINALG_OP_TO_LOOPS(ConvOp)
 INSTANTIATE_LINALG_OP_TO_LOOPS(PoolingMaxOp)

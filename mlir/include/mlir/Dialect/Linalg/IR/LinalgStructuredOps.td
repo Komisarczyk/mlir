@@ -224,7 +224,33 @@ def MatvecOp : LinalgStructured_Op<"matvec", [NInputs<2>, NOutputs<1>]> {
 
   let hasFolder = 1;
 }
+def VecmatOp : LinalgStructured_Op<"vecmat", [NInputs<2>, NOutputs<1>]> {
 
+  let arguments = (ins AnyStridedMemRefOfRank<1>,
+                       AnyStridedMemRefOfRank<2>,
+                       AnyStridedMemRefOfRank<1>);
+
+  let extraClassDeclaration = libraryCallName # [{
+    llvm::Optional<SmallVector<StringRef, 8>> referenceIterators() {
+      return SmallVector<StringRef, 8>{
+        getParallelIteratorTypeName(), getReductionIteratorTypeName()};
+    }
+
+    // A( r_j) * B(i, r_j) -> C(i)
+    llvm::Optional<SmallVector<AffineMap, 8>> referenceIndexingMaps() {
+      MLIRContext *context = getContext();
+      AffineExpr i, r_j;
+      bindDims(context, i, r_j);
+      return SmallVector<AffineMap, 8>{
+        AffineMap::get(2, 0, {r_j}, context), 
+        AffineMap::get(2, 0, {i, r_j}, context),
+        AffineMap::get(2, 0, {i}, context)
+      };
+    }
+  }];
+
+  let hasFolder = 1;
+}
 def MatmulOp : LinalgStructured_Op<"matmul", [NInputs<2>, NOutputs<1>]> {
 
   let arguments = (ins AnyStridedMemRefOfRank<2>,

@@ -17,7 +17,7 @@ int main() {
 
   for (int i = 0; i < 1024; i++)
     for (int j = 0; j < 1024; j++)
-      A[i][j] = A[i][j] + u1[i] * v1[j] + u2[i] * v2[j];
+      A[i][j] = A[i][j] + u1[i] * v1[j];// + u2[i] * v2[j];
 
   for (int i = 0; i < 1024; i++)
     for (int j = 0; j < 1024; j++)

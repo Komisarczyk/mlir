@@ -54,6 +54,10 @@ def : Pattern<(MatvecOp:$op $_, $_, $_),
               [(TileLinalgOp<[5, 6], "L1">)],
               [(Constraint<HasNoLinalgTransformMarker>)]>;
 
+def : Pattern<(VecmatOp:$op $_, $_, $_),
+              [(TileLinalgOp<[5, 6], "L1">)],
+              [(Constraint<HasNoLinalgTransformMarker>)]>;              
+
 def : Pattern<(DotOp:$op $_, $_, $_),
               [(TileLinalgOp<[8000], "L1">)],
               [(Constraint<Or<[HasNoLinalgTransformMarker,
@@ -79,6 +83,9 @@ def : Pat<(MatmulOp:$op $_, $_, $_),
 
 
 def : Pattern<(MatvecOp:$op $_, $_, $_),
+              [(TileLinalgOp<[5, 6], "L1__with_perm__", [1,0]>)],
+              [(Constraint<HasLinalgTransformMarker<"__with_perm__">>)]>;
+def : Pattern<(VecmatOp:$op $_, $_, $_),
               [(TileLinalgOp<[5, 6], "L1__with_perm__", [1,0]>)],
               [(Constraint<HasLinalgTransformMarker<"__with_perm__">>)]>;
 

@@ -7,7 +7,7 @@
 //===----------------------------------------------------------------------===//
 #ifndef MLIR_CPU_RUNNER_MLIR_TEST_CBLAS_INTERFACE_H_
 #define MLIR_CPU_RUNNER_MLIR_TEST_CBLAS_INTERFACE_H_
-
+#include <mkl.h>
 #include "mlir/ExecutionEngine/RunnerUtils.h"
 #include <chrono>
 #ifdef _WIN32
@@ -28,12 +28,17 @@ class Timer {
 private:
   static Timer *timer_instance;
   std::chrono::time_point<std::chrono::system_clock> start, end;
+  float s_initial;
 
 public:
-  void start_timer() { start = std::chrono::system_clock::now(); }
+  void start_timer() { start = std::chrono::system_clock::now(); 
+   s_initial = dsecnd();
+  
+  }
 
   void stop_timer() {
     end = std::chrono::system_clock::now();
+    std::cout << (dsecnd() - s_initial);
     std::cout << std::chrono::duration_cast<std::chrono::milliseconds>(end -
                                                                        start)
                      .count()
@@ -46,7 +51,8 @@ public:
     return timer_instance;
   }
 };
-
+int matveccuBlas(float *C, float *A, float *B, int M, int N, int K);
+int vecmatcuBlas( float *A, float *B, float *C, int M, int N, int K);
 extern "C" MLIR_TEST_CBLAS_INTERFACE_EXPORT void start_timer();
 
 extern "C" MLIR_TEST_CBLAS_INTERFACE_EXPORT void stop_timer();
@@ -83,14 +89,25 @@ _mlir_ciface_linalg_dot_viewsxf32_viewsxf32_viewf32(
     StridedMemRefType<float, 0> *Z);
 
 extern "C" MLIR_TEST_CBLAS_INTERFACE_EXPORT void
-_mlir_ciface_matmul_800x900x1100(
-    int transA, int transB, float *C_allocatedptr, float *C_alignedptr,
+cublasMatmul(
+    float *C_allocatedptr, float *C_alignedptr,
     int64_t C_offset, int64_t C_sizes0, int64_t C_sizes1, int64_t C_strides0,
     int64_t C_strides1, float *A_allocatedptr, float *A_alignedptr,
     int64_t A_offset, int64_t A_sizes0, int64_t A_sizes1, int64_t A_strides0,
     int64_t A_strides1, float *B_allocatedptr, float *B_alignedptr,
     int64_t B_offset, int64_t B_sizes0, int64_t B_sizes1, int64_t B_strides0,
-    int64_t B_strides1, int alpha, int beta);
+    int64_t B_strides1);
+
+
+extern "C" MLIR_TEST_CBLAS_INTERFACE_EXPORT void
+cublasMatvec(float *C_allocatedptr, float *C_alignedptr, int64_t C_offset,
+             int64_t C_sizes0, int64_t C_sizes1, int64_t C_strides0,
+             int64_t C_strides1, float *A_allocatedptr, float *A_alignedptr,
+             int64_t A_offset, int64_t A_sizes0, int64_t A_strides0,
+             float *B_allocatedptr, float *B_alignedptr, int64_t B_offset,
+             int64_t B_sizes0, int64_t B_strides0);
+
+
 
 extern "C" MLIR_TEST_CBLAS_INTERFACE_EXPORT void
 _mlir_ciface_matvec_2000x2000x2000(StridedMemRefType<float, 1> *x,

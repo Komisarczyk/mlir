@@ -807,8 +807,9 @@ LogicalResult MLIRCodegen::createBlasOperation(Value A, Value B, Value C) {
   builder_.create<linalg::MatmulOp>(loc, A, B, C);
   return success();
 }
-LogicalResult MLIRCodegen::createMatVecOperation(Value A, Value B, Value C) {
+LogicalResult MLIRCodegen::createMatVecOperation(Value A, Value B, Value C, int rhs) {
   auto loc = builder_.getUnknownLoc();
+/*
    auto valueAttr = builder_.getFloatAttr(builder_.getF32Type(), 1);
    auto beta = builder_.create<ConstantOp>(loc, builder_.getF32Type(), valueAttr); 
   auto module = beta.getParentOfType<ModuleOp>();
@@ -821,8 +822,9 @@ LogicalResult MLIRCodegen::createMatVecOperation(Value A, Value B, Value C) {
                                  beta.getType(), beta.getType()});
   builder_.create<CallOp>(loc, symbolFn, llvm::ArrayRef<Type>{},
                           llvm::ArrayRef<Value>{A, B, C, beta, beta});
-  
-
+  */
+  if(rhs) builder_.create<linalg::MatvecOp>(loc, A, B, C);
+  else builder_.create<linalg::VecmatOp>(loc, B, A, C);
   return success();
 }
 /*
